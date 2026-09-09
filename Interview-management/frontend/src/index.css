@@ -1,0 +1,15 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-sky-50 text-slate-900 antialiased transition-colors;
+}
+
+html.dark body {
+  @apply bg-black text-sky-100;
+}
+
+#root {
+  @apply min-h-screen;
+}

@@ -1,0 +1,142 @@
+openapi: 3.0.3
+info:
+  title: Interview Management API
+  version: 0.1.0
+servers:
+  - url: https://api.example.com
+security:
+  - bearerAuth: []
+paths:
+  /health:
+    get:
+      responses:
+        "200":
+          description: ok
+  /candidates:
+    post:
+      summary: Create candidate
+      responses:
+        "201": { description: Created }
+        "401": { description: Unauthorized }
+        "403": { description: Forbidden }
+  /requisitions:
+    post:
+      summary: Create or update requisition
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - requisition_id
+                - title
+                - department
+                - project
+                - hiring_manager_sub
+                - intake_received_at_utc
+                - positions_total
+                - positions_filled
+                - client_name
+              properties:
+                requisition_id: { type: string }
+                title: { type: string }
+                requirement_summary: { type: string }
+                department: { type: string }
+                project: { type: string }
+                hiring_manager_sub: { type: string }
+                required_skills:
+                  type: array
+                  items: { type: string }
+                status:
+                  type: string
+                  enum: ["Intake Received", "Intake Review", "Approved", "Sourcing", "Interviewing", "Offer", "Filled", "On Hold", "Cancelled", "Closed"]
+                intake_received_at_utc: { type: string, format: date-time }
+                intake_source: { type: string }
+                target_start_date: { type: string }
+                priority: { type: string }
+                positions_total: { type: integer, minimum: 1 }
+                positions_filled: { type: integer, minimum: 0 }
+                client_name: { type: string }
+                client_account_id: { type: string }
+                client_contact_name: { type: string }
+                client_contact_email: { type: string }
+                client_contact_phone: { type: string }
+                client_location: { type: string }
+                billing_type: { type: string }
+                sla_days: { type: integer, minimum: 0 }
+                notes: { type: string }
+      responses:
+        "201": { description: Created }
+  /interviews:
+    post:
+      summary: Schedule interview
+      responses:
+        "201": { description: Created }
+        "409": { description: Reservation conflict }
+  /interviews/{interview_id}:
+    get:
+      parameters:
+        - in: path
+          name: interview_id
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Interview }
+        "403": { description: Forbidden }
+        "404": { description: Not found }
+  /interviews/{interview_id}/reschedule:
+    post:
+      responses:
+        "200": { description: Rescheduled }
+        "409": { description: Version or slot conflict }
+  /interviews/{interview_id}/cancel:
+    post:
+      responses:
+        "200": { description: Cancelled }
+  /feedback/draft:
+    post:
+      responses:
+        "201": { description: Draft saved }
+        "409": { description: Locked feedback }
+  /feedback/submit:
+    post:
+      responses:
+        "200": { description: Submitted }
+  /audit:
+    get:
+      responses:
+        "200": { description: Audit entries }
+  /reports/daily-interviews:
+    get:
+      parameters:
+        - in: query
+          name: date
+          schema: { type: string, format: date }
+        - in: query
+          name: timezone
+          schema: { type: string }
+      responses:
+        "200": { description: Daily scheduled interviews report }
+  /reports/weekly-requirement:
+    get:
+      parameters:
+        - in: query
+          name: week_start
+          schema: { type: string, format: date }
+        - in: query
+          name: timezone
+          schema: { type: string }
+      responses:
+        "200": { description: Weekly requirement report }
+  /admin/users:
+    get:
+      responses:
+        "200": { description: Users }
+        "403": { description: Forbidden }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

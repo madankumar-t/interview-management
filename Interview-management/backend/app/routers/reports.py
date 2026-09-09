@@ -1,0 +1,245 @@
+from collections import defaultdict
+from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from fastapi import APIRouter, HTTPException, Query, status
+
+from app.auth import CurrentUser
+from app.config import settings
+from app.deps import manager_scopes_for, require_capability
+from app.models import Role
+from app.permissions import Capability
+from app.repository import DynamoRepository
+from app.state import local_state
+
+router = APIRouter(prefix="/reports", tags=["reports"])
+
+CLOSED_REQUIREMENT_STATUSES = {"Filled", "Cancelled", "Closed"}
+
+
+def _resolve_timezone(timezone_name: str):
+    try:
+        return ZoneInfo(timezone_name)
+    except ZoneInfoNotFoundError:
+        if timezone_name == "Asia/Kolkata":
+            return timezone(timedelta(hours=5, minutes=30))
+        return timezone.utc
+
+
+def _parse_datetime(value: str | datetime) -> datetime:
+    return value if isinstance(value, datetime) else datetime.fromisoformat(value)
+
+
+def _to_local_date(start_utc: str | datetime, timezone_name: str) -> date:
+    return _parse_datetime(start_utc).astimezone(_resolve_timezone(timezone_name)).date()
+
+
+def _reporting_records() -> tuple[list[dict], list[dict]]:
+    if not settings.demo_mode:
+        return DynamoRepository().list_reporting_records()
+    requisitions = list(local_state.requisitions.values())
+    interviews = [
+        {
+            "interview_id": interview.interview_id,
+            "requisition_id": interview.requisition_id,
+            "candidate_id": interview.candidate_id,
+            "department": interview.department,
+            "project": interview.project,
+            "panel_subs": interview.panel_subs,
+            "start_utc": interview.start_utc,
+            "end_utc": interview.end_utc,
+            "status": interview.status,
+            "feedback_status": "Not Started",
+        }
+        for interview in local_state.scheduling_store.interviews.values()
+    ]
+    return requisitions, interviews
+
+
+def _visible_records(user) -> tuple[list[dict], list[dict]]:
+    requisitions, interviews = _reporting_records()
+    if Role.ADMINISTRATOR in user.groups or Role.TA in user.groups:
+        return requisitions, interviews
+    if Role.PANEL in user.groups:
+        visible_interviews = [item for item in interviews if user.sub in item["panel_subs"]]
+        visible_ids = {item["requisition_id"] for item in visible_interviews}
+        return [item for item in requisitions if item["requisition_id"] in visible_ids], visible_interviews
+    if Role.MANAGER in user.groups:
+        scopes = manager_scopes_for(user)
+        in_scope = lambda item: f"{item.get('department', '')}#{item.get('project', '')}" in scopes
+        return [item for item in requisitions if in_scope(item)], [item for item in interviews if in_scope(item)]
+    return [], []
+
+
+def _matches_requirement(
+    requirement: dict,
+    requisition_id: str,
+    client_name: str,
+    requirement_status: str,
+    open_only: bool,
+) -> bool:
+    if requisition_id and requirement["requisition_id"] != requisition_id:
+        return False
+    if client_name and requirement.get("client_name", "").casefold() != client_name.casefold():
+        return False
+    if requirement_status and requirement.get("status", "").casefold() != requirement_status.casefold():
+        return False
+    return not open_only or (
+        requirement.get("status") not in CLOSED_REQUIREMENT_STATUSES
+        and int(requirement.get("positions_open", 0)) > 0
+    )
+
+
+def _requirement_rows(requisitions: list[dict], interviews: list[dict]) -> list[dict]:
+    counters: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    for interview in interviews:
+        stats = counters[interview["requisition_id"]]
+        stats["interviews_total"] += 1
+        stats[interview["status"]] += 1
+        if interview.get("feedback_status", "Not Started") != "Submitted":
+            stats["pending_feedback"] += 1
+
+    rows = []
+    for requisition in requisitions:
+        requisition_id = requisition["requisition_id"]
+        stats = counters[requisition_id]
+        positions_total = int(requisition.get("positions_total", 0) or 0)
+        positions_filled = int(requisition.get("positions_filled", 0) or 0)
+        rows.append(
+            {
+                **requisition,
+                "positions_total": positions_total,
+                "positions_filled": positions_filled,
+                "positions_open": int(requisition.get("positions_open", max(0, positions_total - positions_filled))),
+                "interviews_total": stats["interviews_total"],
+                "scheduled": stats["Scheduled"],
+                "in_progress": stats["In Progress"],
+                "completed": stats["Completed"],
+                "cancelled": stats["Cancelled"],
+                "no_show": stats["No Show"],
+                "pending_feedback": stats["pending_feedback"],
+            }
+        )
+    return sorted(rows, key=lambda item: item["requisition_id"])
+
+
+@router.get("/overview")
+def overview(
+    user=CurrentUser,
+    requisition_id: str = Query(default=""),
+    client_name: str = Query(default=""),
+    requirement_status: str = Query(alias="status", default=""),
+    open_only: bool = Query(default=False),
+    timezone_name: str = Query(alias="timezone", default="Asia/Kolkata"),
+):
+    require_capability(user, Capability.VIEW_REPORTS)
+    requisitions, interviews = _visible_records(user)
+    requirements = [
+        row
+        for row in _requirement_rows(requisitions, interviews)
+        if _matches_requirement(row, requisition_id, client_name, requirement_status, open_only)
+    ]
+    requirement_ids = {row["requisition_id"] for row in requirements}
+    filtered_interviews = [item for item in interviews if item["requisition_id"] in requirement_ids]
+    today = datetime.now(_resolve_timezone(timezone_name)).date()
+    open_requirements = [
+        row
+        for row in requirements
+        if row["status"] not in CLOSED_REQUIREMENT_STATUSES and row["positions_open"] > 0
+    ]
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "timezone": timezone_name,
+        "summary": {
+            "total_requirements": len(requirements),
+            "open_requirements": len(open_requirements),
+            "open_positions": sum(row["positions_open"] for row in open_requirements),
+            "clients": len({row["client_name"] for row in requirements if row.get("client_name")}),
+            "today_interviews": sum(_to_local_date(item["start_utc"], timezone_name) == today for item in filtered_interviews),
+            "upcoming_interviews": sum(
+                _parse_datetime(item["start_utc"]) >= datetime.now(timezone.utc)
+                and item["status"] in {"Scheduled", "In Progress"}
+                for item in filtered_interviews
+            ),
+            "pending_feedback": sum(item.get("feedback_status", "Not Started") != "Submitted" for item in filtered_interviews),
+        },
+        "filters": {
+            "requisitions": sorted({row["requisition_id"] for row in requisitions}),
+            "clients": sorted({row["client_name"] for row in requisitions if row.get("client_name")}),
+            "statuses": sorted({row["status"] for row in requisitions if row.get("status")}),
+        },
+        "requirements": requirements,
+    }
+
+
+@router.get("/workload")
+def workload(user=CurrentUser):
+    require_capability(user, Capability.VIEW_REPORTS)
+    _, interviews = _visible_records(user)
+    own = [item for item in interviews if user.sub in item["panel_subs"]]
+    return {"total_interviews": len(interviews), "my_interviews": len(own)}
+
+
+@router.get("/daily-interviews")
+def daily_interviews(
+    user=CurrentUser,
+    report_date: str = Query(alias="date", default=""),
+    timezone_name: str = Query(alias="timezone", default="Asia/Kolkata"),
+):
+    require_capability(user, Capability.VIEW_REPORTS)
+    try:
+        selected_date = date.fromisoformat(report_date) if report_date else datetime.now(_resolve_timezone(timezone_name)).date()
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid date format. Use YYYY-MM-DD") from exc
+    requisitions, interviews = _visible_records(user)
+    requisitions_by_id = {item["requisition_id"]: item for item in requisitions}
+    grouped: dict[str, dict] = {}
+    rows: list[dict] = []
+    for interview in interviews:
+        if interview["status"] != "Scheduled" or _to_local_date(interview["start_utc"], timezone_name) != selected_date:
+            continue
+        requisition = requisitions_by_id.get(interview["requisition_id"], {})
+        item = grouped.setdefault(
+            interview["requisition_id"],
+            {
+                "requisition_id": interview["requisition_id"],
+                "title": requisition.get("title", ""),
+                "client_name": requisition.get("client_name", ""),
+                "scheduled_count": 0,
+            },
+        )
+        item["scheduled_count"] += 1
+        rows.append({**interview, "start_utc": _parse_datetime(interview["start_utc"]).isoformat(), "end_utc": _parse_datetime(interview["end_utc"]).isoformat()})
+    return {
+        "date": selected_date.isoformat(),
+        "timezone": timezone_name,
+        "total_scheduled": len(rows),
+        "by_requisition": list(grouped.values()),
+        "interviews": rows,
+    }
+
+
+@router.get("/weekly-requirement")
+def weekly_requirement(
+    user=CurrentUser,
+    week_start: str = Query(default=""),
+    timezone_name: str = Query(alias="timezone", default="Asia/Kolkata"),
+):
+    require_capability(user, Capability.VIEW_REPORTS)
+    try:
+        start_date = date.fromisoformat(week_start) if week_start else datetime.now(_resolve_timezone(timezone_name)).date()
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid week_start format. Use YYYY-MM-DD") from exc
+    end_date = start_date + timedelta(days=7)
+    requisitions, interviews = _visible_records(user)
+    weekly_interviews = [
+        item
+        for item in interviews
+        if start_date <= _to_local_date(item["start_utc"], timezone_name) < end_date
+    ]
+    return {
+        "week_start": start_date.isoformat(),
+        "week_end_exclusive": end_date.isoformat(),
+        "timezone": timezone_name,
+        "requirements": _requirement_rows(requisitions, weekly_interviews),
+    }

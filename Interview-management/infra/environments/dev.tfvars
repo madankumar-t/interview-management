@@ -1,0 +1,5 @@
+aws_region        = "us-east-2"
+application_name  = "interview-management"
+environment       = "dev"
+custom_domain     = ""
+certificate_arn   = ""

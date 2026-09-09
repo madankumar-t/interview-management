@@ -1,0 +1,40 @@
+{
+  "users": [
+    { "sub": "demo-admin-1", "groups": ["Administrator"], "status": "ACTIVE", "authz_version": 1 },
+    { "sub": "demo-manager-1", "groups": ["Manager"], "status": "ACTIVE", "authz_version": 1 },
+    { "sub": "demo-ta-1", "groups": ["TA"], "status": "ACTIVE", "authz_version": 1 },
+    { "sub": "demo-panel-1", "groups": ["Panel"], "status": "ACTIVE", "authz_version": 1 }
+  ],
+  "manager_scopes": [
+    { "sub": "demo-manager-1", "scope": "Engineering#Core" }
+  ],
+  "candidates": [
+    {
+      "candidate_id": "cand-1001",
+      "candidate_type": "Internal",
+      "full_name": "Anita Rao",
+      "email": "anita.rao@example.com",
+      "phone": "+91-900000001",
+      "department": "Engineering",
+      "project": "Core",
+      "ta_owner_sub": "demo-ta-1"
+    }
+  ],
+  "requisitions": [
+    {
+      "requisition_id": "REQ-100",
+      "title": "Senior Backend Engineer",
+      "department": "Engineering",
+      "project": "Core",
+      "hiring_manager_sub": "demo-manager-1",
+      "status": "Sourcing",
+      "intake_received_at_utc": "2026-09-01T08:00:00Z",
+      "positions_total": 3,
+      "positions_filled": 1,
+      "positions_open": 2,
+      "client_name": "Contoso Ltd",
+      "client_contact_name": "Asha Menon",
+      "billing_type": "T&M"
+    }
+  ]
+}
