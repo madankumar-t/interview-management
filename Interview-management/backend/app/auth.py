@@ -53,12 +53,13 @@ async def get_current_user(request: Request) -> AuthContext:
     token_use = claims.get("token_use")
     if token_use != "access":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Access token required")
+    raw_authz_version = claims.get("custom:authz_version")
     return AuthContext(
         sub=claims["sub"],
         email=claims.get("email"),
         groups=_parse_groups(claims.get("cognito:groups")),
         token_use=token_use,
-        authz_version=int(claims.get("custom:authz_version", "0")),
+        authz_version=int(raw_authz_version) if raw_authz_version is not None else None,
     )
 
 

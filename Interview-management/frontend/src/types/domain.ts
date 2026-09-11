@@ -77,6 +77,7 @@ export interface CandidateSummary {
   email: string;
   phone: string;
   candidate_type: "Internal" | "External";
+  status: "Active" | "Closed";
   department: string;
   project: string;
 }
@@ -94,9 +95,18 @@ export interface RequisitionSummary {
 }
 
 export interface PanelMember {
+  panel_id: string;
   sub: string;
+  login_sub: string;
+  full_name: string;
   email: string;
+  phone: string;
+  panel_type: "Internal" | "External";
   skills: string[];
+  experience_years: number;
+  designation: string;
+  organization: string;
+  status: "Active" | "Inactive" | "ACTIVE";
   availability_slots: number;
 }
 
@@ -131,5 +141,16 @@ export interface AdminUser {
   groups: string[];
   status: "ACTIVE" | "DISABLED";
   authz_version: number;
+}
+
+export interface AuditRecord {
+  at: string;
+  entity: string;
+  entity_id: string;
+  action: string;
+  actor_sub: string;
+  actor_email: string;
+  actor_roles: string[];
+  changes: string;
 }
 

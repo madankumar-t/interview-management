@@ -32,31 +32,38 @@ class CognitoAdmin:
             raise CognitoAdminError(exc.response["Error"].get("Message", str(exc))) from exc
         user = response["User"]
         sub = next(a["Value"] for a in user["Attributes"] if a["Name"] == "sub")
-        return {"sub": sub, "email": email, "full_name": full_name or "", "enabled": user.get("Enabled", True), "cognito_status": user["UserStatus"]}
+        return {
+            "sub": sub,
+            "username": user["Username"],
+            "email": email,
+            "full_name": full_name or "",
+            "enabled": user.get("Enabled", True),
+            "cognito_status": user["UserStatus"],
+        }
 
-    def add_to_group(self, sub: str, group: str) -> None:
-        self.client.admin_add_user_to_group(UserPoolId=self.user_pool_id, Username=sub, GroupName=group)
+    def add_to_group(self, username: str, group: str) -> None:
+        self.client.admin_add_user_to_group(UserPoolId=self.user_pool_id, Username=username, GroupName=group)
 
-    def remove_from_group(self, sub: str, group: str) -> None:
-        self.client.admin_remove_user_from_group(UserPoolId=self.user_pool_id, Username=sub, GroupName=group)
+    def remove_from_group(self, username: str, group: str) -> None:
+        self.client.admin_remove_user_from_group(UserPoolId=self.user_pool_id, Username=username, GroupName=group)
 
-    def groups_for_user(self, sub: str) -> list[str]:
-        response = self.client.admin_list_groups_for_user(UserPoolId=self.user_pool_id, Username=sub)
+    def groups_for_user(self, username: str) -> list[str]:
+        response = self.client.admin_list_groups_for_user(UserPoolId=self.user_pool_id, Username=username)
         return [group["GroupName"] for group in response.get("Groups", [])]
 
-    def set_groups(self, sub: str, groups: list[str]) -> None:
-        current = set(self.groups_for_user(sub))
+    def set_groups(self, username: str, groups: list[str]) -> None:
+        current = set(self.groups_for_user(username))
         target = set(groups)
         for group in current - target:
-            self.remove_from_group(sub, group)
+            self.remove_from_group(username, group)
         for group in target - current:
-            self.add_to_group(sub, group)
+            self.add_to_group(username, group)
 
-    def disable_user(self, sub: str) -> None:
-        self.client.admin_disable_user(UserPoolId=self.user_pool_id, Username=sub)
+    def disable_user(self, username: str) -> None:
+        self.client.admin_disable_user(UserPoolId=self.user_pool_id, Username=username)
 
-    def enable_user(self, sub: str) -> None:
-        self.client.admin_enable_user(UserPoolId=self.user_pool_id, Username=sub)
+    def enable_user(self, username: str) -> None:
+        self.client.admin_enable_user(UserPoolId=self.user_pool_id, Username=username)
 
     def list_users(self) -> list[dict[str, Any]]:
         users: list[dict[str, Any]] = []
@@ -72,11 +79,12 @@ class CognitoAdmin:
                 users.append(
                     {
                         "sub": sub,
+                        "username": user["Username"],
                         "email": attrs.get("email", user["Username"]),
                         "full_name": attrs.get("name", ""),
                         "enabled": user.get("Enabled", True),
                         "cognito_status": user.get("UserStatus", ""),
-                        "groups": self.groups_for_user(sub) if sub else [],
+                        "groups": self.groups_for_user(user["Username"]),
                     }
                 )
             pagination_token = response.get("PaginationToken")

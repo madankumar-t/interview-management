@@ -3,13 +3,17 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AppLayout } from "./components/AppLayout";
 import { DashboardPage } from "./pages/DashboardPage";
 import { CandidatesPage } from "./pages/CandidatesPage";
+import { CandidateListPage } from "./pages/CandidateListPage";
 import { RequisitionsPage } from "./pages/RequisitionsPage";
+import { RequisitionListPage } from "./pages/RequisitionListPage";
+import { PanelsPage } from "./pages/PanelsPage";
 import { InterviewsPage } from "./pages/InterviewsPage";
 import { ScheduleInterviewPage } from "./pages/ScheduleInterviewPage";
 import { CalendarPage } from "./pages/CalendarPage";
 import { MySchedulePage } from "./pages/MySchedulePage";
 import { FeedbackPage } from "./pages/FeedbackPage";
 import { UsersPage } from "./pages/UsersPage";
+import { AuditPage } from "./pages/AuditPage";
 import { SimplePage } from "./pages/SimplePage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { config } from "./lib/config";
@@ -73,15 +77,18 @@ function App() {
           <Route path="/interviews" element={<InterviewsPage />} />
           <Route path="/interviews/new" element={<ScheduleInterviewPage />} />
           <Route path="/interviews/:interviewId/feedback" element={<FeedbackPage session={session} />} />
-          <Route path="/candidates" element={<CandidatesPage />} />
-          <Route path="/requisitions" element={<RequisitionsPage />} />
+          <Route path="/candidates" element={<CandidateListPage />} />
+          <Route path="/candidates/new" element={<CandidatesPage />} />
+          <Route path="/requisitions" element={<RequisitionListPage />} />
+          <Route path="/requisitions/new" element={<RequisitionsPage />} />
+          <Route path="/panels" element={<PanelsPage />} />
           <Route path="/my-schedule" element={<MySchedulePage groups={session.groups} />} />
           <Route path="/my-availability" element={<SimplePage title="My Availability" />} />
           <Route path="/pending-feedback" element={<SimplePage title="Pending Feedback" />} />
           <Route path="/reports" element={<ReportsPage />} />
           {isAdmin && <Route path="/users" element={<UsersPage />} />}
           {isAdmin && <Route path="/settings" element={<SimplePage title="Settings" />} />}
-          <Route path="/audit" element={<SimplePage title="Audit Log" />} />
+          <Route path="/audit" element={<AuditPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

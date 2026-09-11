@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -57,6 +58,8 @@ class SchedulePayload:
     instructions: str | None
     required_skills: list[str]
     actor_sub: str
+    actor_email: str
+    actor_roles: list[str]
     idempotency_key: str
 
 
@@ -65,7 +68,17 @@ class DynamoRepository:
         self.client = boto3.client("dynamodb", region_name=settings.aws_region)
         self.table_name = settings.table_name
 
-    def _put_audit(self, tx_items: list[dict[str, Any]], entity: str, entity_id: str, action: str, actor_sub: str, changes: str) -> None:
+    def _put_audit(
+        self,
+        tx_items: list[dict[str, Any]],
+        entity: str,
+        entity_id: str,
+        action: str,
+        actor_sub: str,
+        changes: str,
+        actor_email: str = "",
+        actor_roles: list[str] | None = None,
+    ) -> None:
         tx_items.append(
             {
                 "Put": {
@@ -77,13 +90,48 @@ class DynamoRepository:
                         "entity_id": {"S": entity_id},
                         "action": {"S": action},
                         "actor_sub": {"S": actor_sub},
+                        "actor_email": {"S": actor_email},
+                        "actor_roles": {"SS": actor_roles or ["__none__"]},
                         "changes": {"S": changes[:1000]},
                     },
                 }
             }
         )
 
-    def ensure_active_authorization(self, user_sub: str, token_authz_version: int, sensitive: bool) -> None:
+    def list_audit(self, limit: int = 200) -> list[dict[str, Any]]:
+        records: list[dict[str, Any]] = []
+        exclusive_start_key: dict[str, Any] | None = None
+        while True:
+            request: dict[str, Any] = {
+                "TableName": self.table_name,
+                "FilterExpression": "begins_with(pk, :audit_prefix)",
+                "ExpressionAttributeValues": {":audit_prefix": {"S": "AUDIT#"}},
+                "ProjectionExpression": "sk, entity, entity_id, #action, actor_sub, actor_email, actor_roles, changes",
+                "ExpressionAttributeNames": {"#action": "action"},
+            }
+            if exclusive_start_key:
+                request["ExclusiveStartKey"] = exclusive_start_key
+            response = self.client.scan(**request)
+            for item in response.get("Items", []):
+                records.append(
+                    {
+                        "at": item.get("sk", {}).get("S", "").removeprefix("TS#"),
+                        "entity": item.get("entity", {}).get("S", ""),
+                        "entity_id": item.get("entity_id", {}).get("S", ""),
+                        "action": item.get("action", {}).get("S", ""),
+                        "actor_sub": item.get("actor_sub", {}).get("S", ""),
+                        "actor_email": item.get("actor_email", {}).get("S", ""),
+                        "actor_roles": [role for role in item.get("actor_roles", {}).get("SS", []) if role != "__none__"],
+                        "changes": item.get("changes", {}).get("S", ""),
+                    }
+                )
+            exclusive_start_key = response.get("LastEvaluatedKey")
+            if not exclusive_start_key:
+                break
+        records.sort(key=lambda record: record["at"], reverse=True)
+        return records[:limit]
+
+    def ensure_active_authorization(self, user_sub: str, token_authz_version: int | None, sensitive: bool) -> None:
         if not sensitive:
             return
         response = self.client.get_item(
@@ -96,7 +144,7 @@ class DynamoRepository:
             raise AuthorizationStateError("User profile missing")
         status_value = item.get("status", {}).get("S", "DISABLED")
         authz_version = int(item.get("authz_version", {}).get("N", "0"))
-        if status_value != "ACTIVE" or authz_version != token_authz_version:
+        if status_value != "ACTIVE" or (token_authz_version is not None and authz_version != token_authz_version):
             raise AuthorizationStateError("Stale or revoked authorization")
 
     def get_manager_scopes(self, manager_sub: str) -> set[str]:
@@ -248,6 +296,7 @@ class DynamoRepository:
             "department": {"S": payload["department"]},
             "project": {"S": payload["project"]},
             "candidate_type": {"S": payload["candidate_type"]},
+            "status": {"S": payload.get("status", "Active")},
             "ta_owner_sub": {"S": payload["ta_owner_sub"]},
             "payload_json": {"S": str(payload)},
             "updated_at": {"S": now},
@@ -297,8 +346,8 @@ class DynamoRepository:
                 "TableName": self.table_name,
                 "FilterExpression": "entity_type = :candidate",
                 "ExpressionAttributeValues": {":candidate": {"S": "candidate"}},
-                "ProjectionExpression": "candidate_id, full_name, email, phone, candidate_type, department, #project",
-                "ExpressionAttributeNames": {"#project": "project"},
+                "ProjectionExpression": "candidate_id, full_name, email, phone, candidate_type, department, #project, #status",
+                "ExpressionAttributeNames": {"#project": "project", "#status": "status"},
             }
             if exclusive_start_key:
                 request["ExclusiveStartKey"] = exclusive_start_key
@@ -311,6 +360,7 @@ class DynamoRepository:
                         "email": item.get("email", {}).get("S", ""),
                         "phone": item.get("phone", {}).get("S", ""),
                         "candidate_type": item.get("candidate_type", {}).get("S", ""),
+                        "status": item.get("status", {}).get("S", "Active"),
                         "department": item.get("department", {}).get("S", ""),
                         "project": item.get("project", {}).get("S", ""),
                     }
@@ -320,9 +370,186 @@ class DynamoRepository:
                 break
         return candidates
 
+    def update_candidate_status(
+        self,
+        candidate_id: str,
+        status_value: str,
+        actor_sub: str,
+        actor_email: str,
+        actor_roles: list[str],
+    ) -> None:
+        tx_items: list[dict[str, Any]] = [
+            {
+                "Update": {
+                    "TableName": self.table_name,
+                    "Key": {"pk": {"S": f"CANDIDATE#{candidate_id}"}, "sk": {"S": "PROFILE"}},
+                    "UpdateExpression": "SET #status = :status, updated_at = :updated_at, updated_by = :updated_by",
+                    "ConditionExpression": "attribute_exists(pk)",
+                    "ExpressionAttributeNames": {"#status": "status"},
+                    "ExpressionAttributeValues": {
+                        ":status": {"S": status_value},
+                        ":updated_at": {"S": utc_now_iso()},
+                        ":updated_by": {"S": actor_sub},
+                    },
+                }
+            }
+        ]
+        self._put_audit(
+            tx_items, "candidate", candidate_id, "status_updated", actor_sub,
+            f"status={status_value}", actor_email, actor_roles,
+        )
+        try:
+            self.client.transact_write_items(TransactItems=tx_items)
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") == "TransactionCanceledException":
+                raise KeyError("Candidate not found") from exc
+            raise
+
     def list_requisitions(self) -> list[dict[str, Any]]:
         requisitions, _ = self.list_reporting_records()
         return requisitions
+
+    def put_panel(self, panel_id: str, payload: dict[str, Any], actor_sub: str, actor_email: str, actor_roles: list[str]) -> None:
+        now = utc_now_iso()
+        item = {
+            "pk": {"S": f"PANEL_MEMBER#{panel_id}"},
+            "sk": {"S": "PROFILE"},
+            "entity_type": {"S": "panel_member"},
+            "panel_id": {"S": panel_id},
+            "login_sub": {"S": payload.get("login_sub") or ""},
+            "full_name": {"S": payload["full_name"]},
+            "email": {"S": payload["email"]},
+            "phone": {"S": payload.get("phone") or ""},
+            "panel_type": {"S": payload["panel_type"]},
+            "technologies": {"SS": payload["technologies"]},
+            "experience_years": {"N": str(payload["experience_years"])},
+            "designation": {"S": payload.get("designation") or ""},
+            "organization": {"S": payload.get("organization") or ""},
+            "status": {"S": "Active"},
+            "created_at": {"S": now},
+            "created_by": {"S": actor_sub},
+            "updated_at": {"S": now},
+            "updated_by": {"S": actor_sub},
+        }
+        tx_items: list[dict[str, Any]] = [{"Put": {"TableName": self.table_name, "Item": item}}]
+        self._put_audit(
+            tx_items, "panel", panel_id, "created", actor_sub,
+            f"type={payload['panel_type']},technologies={','.join(payload['technologies'])}", actor_email, actor_roles,
+        )
+        self.client.transact_write_items(TransactItems=tx_items)
+
+    def list_panels(self) -> list[dict[str, Any]]:
+        panels: list[dict[str, Any]] = []
+        exclusive_start_key: dict[str, Any] | None = None
+        while True:
+            request: dict[str, Any] = {
+                "TableName": self.table_name,
+                "FilterExpression": "#entity_type = :panel_member",
+                "ExpressionAttributeNames": {"#entity_type": "entity_type", "#status": "status"},
+                "ExpressionAttributeValues": {":panel_member": {"S": "panel_member"}},
+                "ProjectionExpression": (
+                    "panel_id, login_sub, full_name, email, phone, panel_type, technologies, experience_years, "
+                    "designation, organization, #status"
+                ),
+            }
+            if exclusive_start_key:
+                request["ExclusiveStartKey"] = exclusive_start_key
+            response = self.client.scan(**request)
+            for item in response.get("Items", []):
+                panels.append(
+                    {
+                        "panel_id": item["panel_id"]["S"],
+                        "sub": item.get("login_sub", {}).get("S") or item["panel_id"]["S"],
+                        "login_sub": item.get("login_sub", {}).get("S", ""),
+                        "full_name": item.get("full_name", {}).get("S", ""),
+                        "email": item.get("email", {}).get("S", ""),
+                        "phone": item.get("phone", {}).get("S", ""),
+                        "panel_type": item.get("panel_type", {}).get("S", "Internal"),
+                        "skills": item.get("technologies", {}).get("SS", []),
+                        "experience_years": float(item.get("experience_years", {}).get("N", "0")),
+                        "designation": item.get("designation", {}).get("S", ""),
+                        "organization": item.get("organization", {}).get("S", ""),
+                        "status": item.get("status", {}).get("S", "Active"),
+                        "availability_slots": 0,
+                    }
+                )
+            exclusive_start_key = response.get("LastEvaluatedKey")
+            if not exclusive_start_key:
+                break
+        return panels
+
+    def update_panel_status(
+        self, panel_id: str, status_value: str, actor_sub: str, actor_email: str, actor_roles: list[str]
+    ) -> None:
+        tx_items: list[dict[str, Any]] = [
+            {
+                "Update": {
+                    "TableName": self.table_name,
+                    "Key": {"pk": {"S": f"PANEL_MEMBER#{panel_id}"}, "sk": {"S": "PROFILE"}},
+                    "UpdateExpression": "SET #status = :status, updated_at = :updated_at, updated_by = :updated_by",
+                    "ConditionExpression": "attribute_exists(pk)",
+                    "ExpressionAttributeNames": {"#status": "status"},
+                    "ExpressionAttributeValues": {
+                        ":status": {"S": status_value},
+                        ":updated_at": {"S": utc_now_iso()},
+                        ":updated_by": {"S": actor_sub},
+                    },
+                }
+            }
+        ]
+        self._put_audit(
+            tx_items, "panel", panel_id, "status_updated", actor_sub,
+            f"status={status_value}", actor_email, actor_roles,
+        )
+        try:
+            self.client.transact_write_items(TransactItems=tx_items)
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") == "TransactionCanceledException":
+                raise KeyError("Panel not found") from exc
+            raise
+
+    def update_requisition_status(
+        self,
+        requisition_id: str,
+        status_value: str,
+        actor_sub: str,
+        actor_email: str,
+        actor_roles: list[str],
+    ) -> None:
+        now = utc_now_iso()
+        tx_items: list[dict[str, Any]] = [
+            {
+                "Update": {
+                    "TableName": self.table_name,
+                    "Key": {"pk": {"S": f"REQUISITION#{requisition_id}"}, "sk": {"S": "PROFILE"}},
+                    "UpdateExpression": "SET #status = :status, gsi1pk = :gsi1pk, updated_at = :updated_at, updated_by = :updated_by",
+                    "ConditionExpression": "attribute_exists(pk)",
+                    "ExpressionAttributeNames": {"#status": "status"},
+                    "ExpressionAttributeValues": {
+                        ":status": {"S": status_value},
+                        ":gsi1pk": {"S": f"REQUISITION#STATUS#{status_value}"},
+                        ":updated_at": {"S": now},
+                        ":updated_by": {"S": actor_sub},
+                    },
+                }
+            }
+        ]
+        self._put_audit(
+            tx_items,
+            "requisition",
+            requisition_id,
+            "status_updated",
+            actor_sub,
+            f"status={status_value}",
+            actor_email,
+            actor_roles,
+        )
+        try:
+            self.client.transact_write_items(TransactItems=tx_items)
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") == "TransactionCanceledException":
+                raise KeyError("Requisition not found") from exc
+            raise
 
     def get_requisition_scope(self, requisition_id: str) -> tuple[str, str]:
         result = self.client.get_item(
@@ -417,6 +644,8 @@ class DynamoRepository:
             entity_id=payload.interview_id,
             action="scheduled",
             actor_sub=payload.actor_sub,
+            actor_email=payload.actor_email,
+            actor_roles=payload.actor_roles,
             changes=f"start={payload.start_utc},end={payload.end_utc},panel={payload.panel_subs}",
         )
         try:
@@ -616,4 +845,129 @@ class DynamoRepository:
             "timezone": item["timezone"]["S"],
             "status": item["status"]["S"],
             "version": int(item["version"]["N"]),
+        }
+
+    def get_feedback(self, interview_id: str, author_sub: str) -> dict[str, Any] | None:
+        result = self.client.get_item(
+            TableName=self.table_name,
+            Key={"pk": {"S": f"INTERVIEW#{interview_id}"}, "sk": {"S": f"FEEDBACK#{author_sub}"}},
+            ConsistentRead=True,
+        )
+        item = result.get("Item")
+        return self._deserialize_feedback(item) if item else None
+
+    def list_feedback(self, interview_id: str) -> list[dict[str, Any]]:
+        result = self.client.query(
+            TableName=self.table_name,
+            KeyConditionExpression="pk = :pk AND begins_with(sk, :feedback)",
+            ExpressionAttributeValues={
+                ":pk": {"S": f"INTERVIEW#{interview_id}"},
+                ":feedback": {"S": "FEEDBACK#"},
+            },
+        )
+        return [self._deserialize_feedback(item) for item in result.get("Items", [])]
+
+    def put_feedback_draft(
+        self,
+        interview_id: str,
+        author_sub: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        now = utc_now_iso()
+        item = {
+            "pk": {"S": f"INTERVIEW#{interview_id}"},
+            "sk": {"S": f"FEEDBACK#{author_sub}"},
+            "entity_type": {"S": "feedback"},
+            "interview_id": {"S": interview_id},
+            "author_sub": {"S": author_sub},
+            "competency_scores": {"S": json.dumps(payload["competency_scores"], separators=(",", ":"))},
+            "strengths": {"S": payload["strengths"]},
+            "improvement_areas": {"S": payload["improvement_areas"]},
+            "recommendation": {"S": payload["recommendation"]},
+            "comments": {"S": payload["comments"]},
+            "status": {"S": "Draft"},
+            "updated_at": {"S": now},
+        }
+        try:
+            self.client.put_item(
+                TableName=self.table_name,
+                Item=item,
+                ConditionExpression="attribute_not_exists(#status) OR #status <> :submitted",
+                ExpressionAttributeNames={"#status": "status"},
+                ExpressionAttributeValues={":submitted": {"S": "Submitted"}},
+            )
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
+                raise ConflictError("Submitted feedback is locked") from exc
+            raise
+        return self._deserialize_feedback(item)
+
+    def submit_feedback(
+        self,
+        interview_id: str,
+        author_sub: str,
+        actor_email: str,
+        actor_roles: list[str],
+    ) -> dict[str, Any]:
+        existing = self.get_feedback(interview_id, author_sub)
+        if not existing:
+            raise KeyError("Draft not found")
+        if existing["status"] == "Submitted":
+            return existing
+        submitted_at = utc_now_iso()
+        tx_items: list[dict[str, Any]] = [
+            {
+                "Update": {
+                    "TableName": self.table_name,
+                    "Key": {"pk": {"S": f"INTERVIEW#{interview_id}"}, "sk": {"S": f"FEEDBACK#{author_sub}"}},
+                    "UpdateExpression": "SET #status = :submitted, submitted_at = :submitted_at, updated_at = :submitted_at",
+                    "ConditionExpression": "#status = :draft",
+                    "ExpressionAttributeNames": {"#status": "status"},
+                    "ExpressionAttributeValues": {
+                        ":submitted": {"S": "Submitted"},
+                        ":draft": {"S": "Draft"},
+                        ":submitted_at": {"S": submitted_at},
+                    },
+                }
+            },
+            {
+                "Update": {
+                    "TableName": self.table_name,
+                    "Key": {"pk": {"S": f"INTERVIEW#{interview_id}"}, "sk": {"S": "PROFILE"}},
+                    "UpdateExpression": "SET feedback_status = :submitted",
+                    "ExpressionAttributeValues": {":submitted": {"S": "Submitted"}},
+                }
+            },
+        ]
+        self._put_audit(
+            tx_items,
+            "feedback",
+            f"{interview_id}::{author_sub}",
+            "submitted",
+            author_sub,
+            "status=Submitted",
+            actor_email,
+            actor_roles,
+        )
+        try:
+            self.client.transact_write_items(TransactItems=tx_items)
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") == "TransactionCanceledException":
+                raise ConflictError("Feedback submission conflict") from exc
+            raise
+        return {**existing, "status": "Submitted", "submitted_at": submitted_at, "updated_at": submitted_at}
+
+    @staticmethod
+    def _deserialize_feedback(item: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "interview_id": item["interview_id"]["S"],
+            "competency_scores": json.loads(item.get("competency_scores", {}).get("S", "{}")),
+            "strengths": item.get("strengths", {}).get("S", ""),
+            "improvement_areas": item.get("improvement_areas", {}).get("S", ""),
+            "recommendation": item.get("recommendation", {}).get("S", ""),
+            "comments": item.get("comments", {}).get("S", ""),
+            "author_sub": item["author_sub"]["S"],
+            "status": item.get("status", {}).get("S", "Draft"),
+            "updated_at": item.get("updated_at", {}).get("S", ""),
+            "submitted_at": item.get("submitted_at", {}).get("S", ""),
         }

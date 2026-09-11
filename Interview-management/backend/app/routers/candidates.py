@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+from typing import Literal
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 
 from app.auth import CurrentUser
 from app.config import settings
 from app.deps import require_capability
-from app.models import CandidateUpsertRequest, utc_now_iso
+from app.models import CandidateStatusUpdateRequest, CandidateUpsertRequest, utc_now_iso
 from app.permissions import Capability
 from app.repository import DynamoRepository
 from app.state import local_state
@@ -21,6 +22,7 @@ def create_candidate(payload: CandidateUpsertRequest, user=CurrentUser):
     candidate_id = str(uuid4())
     record = payload.model_dump()
     record["candidate_id"] = candidate_id
+    record["status"] = "Active"
     record["created_at"] = utc_now_iso()
     record["created_by"] = user.sub
     if settings.demo_mode:
@@ -39,7 +41,14 @@ def create_candidate(payload: CandidateUpsertRequest, user=CurrentUser):
 
 
 @router.get("")
-def list_candidates(user=CurrentUser, q: str = "", candidate_type: str = ""):
+def list_candidates(
+    user=CurrentUser,
+    q: str = "",
+    candidate_type: str = "",
+    lifecycle: Literal["active", "closed", "all"] = "active",
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+):
     require_capability(user, Capability.VIEW_INTERVIEWS)
     if settings.demo_mode:
         records = list(local_state.candidates.values())
@@ -50,10 +59,42 @@ def list_candidates(user=CurrentUser, q: str = "", candidate_type: str = ""):
         record
         for record in records
         if (not candidate_type or record.get("candidate_type") == candidate_type)
+        and (
+            lifecycle == "all"
+            or (lifecycle == "closed" and record.get("status", "Active") == "Closed")
+            or (lifecycle == "active" and record.get("status", "Active") != "Closed")
+        )
         and (not needle or needle in f"{record.get('full_name', '')} {record.get('email', '')}".casefold())
     ]
     results.sort(key=lambda item: item.get("full_name", ""))
-    return {"candidates": results}
+    total = len(results)
+    start = (page - 1) * page_size
+    return {"candidates": results[start : start + page_size], "page": page, "page_size": page_size, "total": total}
+
+
+@router.post("/{candidate_id}/status")
+def update_candidate_status(candidate_id: str, payload: CandidateStatusUpdateRequest, user=CurrentUser):
+    require_capability(user, Capability.MANAGE_CANDIDATES)
+    status_value = payload.status.value
+    if settings.demo_mode:
+        record = local_state.candidates.get(candidate_id)
+        if not record:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Candidate not found")
+        record["status"] = status_value
+        record["updated_at"] = utc_now_iso()
+        record["updated_by"] = user.sub
+        return record
+    try:
+        DynamoRepository().update_candidate_status(
+            candidate_id,
+            status_value,
+            user.sub,
+            user.email or "",
+            sorted(role.value for role in user.groups),
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Candidate not found") from exc
+    return {"candidate_id": candidate_id, "status": status_value, "updated_by": user.sub}
 
 
 @router.get("/{candidate_id}")

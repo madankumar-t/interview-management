@@ -40,7 +40,7 @@ def can_access_scope(user: AuthContext, department: str, project: str, panel_sub
             department=department,
             project=project,
             panel_subs=panel_subs,
-            manager_scopes=manager_scopes_for(user),
+            manager_scopes=manager_scopes_for(user) if Role.MANAGER in user.groups else set(),
             actor_sub=user.sub,
         ),
     )

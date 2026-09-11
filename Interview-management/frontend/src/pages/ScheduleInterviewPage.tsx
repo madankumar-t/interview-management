@@ -271,13 +271,12 @@ export function ScheduleInterviewPage() {
                 }}
                 fetchOptions={() => api.listPanelMembers().then((r) => r.panel_members)}
                 getOptionKey={(p) => p.sub}
-                getOptionLabel={(p) => p.email}
+                getOptionLabel={(p) => p.full_name || p.email}
                 renderOption={(p) => (
                   <div>
-                    <div className="font-medium">{p.email}</div>
+                    <div className="font-medium">{p.full_name || p.email}</div>
                     <div className="text-xs text-slate-500">
-                      {p.skills.length > 0 ? p.skills.join(", ") : "No skills listed"} · {p.availability_slots} availability slot
-                      {p.availability_slots === 1 ? "" : "s"} configured
+                      {p.panel_type} · {p.experience_years} years · {p.skills.length > 0 ? p.skills.join(", ") : "No technologies listed"}
                     </div>
                   </div>
                 )}
@@ -294,7 +293,7 @@ export function ScheduleInterviewPage() {
                 <option value="">Select a lead interviewer</option>
                 {panelMembers.map((member) => (
                   <option key={member.sub} value={member.sub}>
-                    {member.email}
+                    {member.full_name || member.email}
                   </option>
                 ))}
               </select>

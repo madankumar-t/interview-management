@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { PageShell } from "../components/PageShell";
 import { api } from "../lib/api";
 import type { UserSession } from "../types/auth";
-import type { FeedbackRecord, InterviewListItem } from "../types/domain";
+import type { InterviewListItem } from "../types/domain";
 
 const COMPETENCIES = ["Technical", "Communication", "Problem Solving", "Culture Fit"];
 const RECOMMENDATIONS = ["Strong Hire", "Hire", "No Hire", "Strong No Hire"];
@@ -44,25 +44,29 @@ export function FeedbackPage({ session }: { session: UserSession }) {
   useEffect(() => {
     let active = true;
     setLoading(true);
-    Promise.all([
-      api.getInterview(interviewId).catch(() => null),
-      api.getFeedbackForInterview(interviewId).catch(() => [] as FeedbackRecord[]),
-    ]).then(([interviewRecord, records]) => {
-      if (!active) {
-        return;
-      }
-      setInterview(interviewRecord as InterviewListItem | null);
-      const mine = records.find((record) => record.author_sub === session.sub);
-      if (mine) {
-        setScores(mine.competency_scores);
-        setStrengths(mine.strengths);
-        setImprovementAreas(mine.improvement_areas);
-        setRecommendation(mine.recommendation);
-        setComments(mine.comments);
-        setStatus(mine.status);
-      }
-      setLoading(false);
-    });
+    setError("");
+    Promise.all([api.getInterview(interviewId), api.getFeedbackForInterview(interviewId)])
+      .then(([interviewRecord, records]) => {
+        if (!active) return;
+        setInterview(interviewRecord);
+        const mine = records.find((record) => record.author_sub === session.sub);
+        if (mine) {
+          setScores(mine.competency_scores);
+          setStrengths(mine.strengths);
+          setImprovementAreas(mine.improvement_areas);
+          setRecommendation(mine.recommendation);
+          setComments(mine.comments);
+          setStatus(mine.status);
+        }
+      })
+      .catch((reason: unknown) => {
+        if (!active) return;
+        setInterview(null);
+        setError(describeError(reason));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
     return () => {
       active = false;
     };
@@ -116,7 +120,8 @@ export function FeedbackPage({ session }: { session: UserSession }) {
   return (
     <PageShell title="Submit Feedback">
       {loading && <p className="text-slate-500">Loading…</p>}
-      {!loading && (
+      {!loading && error && <p role="alert" className="rounded bg-red-50 p-3 text-red-700">{error}</p>}
+      {!loading && interview && (
         <div className="space-y-4">
           {interview && (
             <div className="rounded border border-slate-200 p-3 text-sm dark:border-slate-800">
@@ -125,7 +130,6 @@ export function FeedbackPage({ session }: { session: UserSession }) {
             </div>
           )}
 
-          {error && <p role="alert" className="rounded bg-red-50 p-3 text-red-700">{error}</p>}
           {message && !error && <p className="rounded bg-emerald-50 p-3 text-emerald-700">{message}</p>}
           {locked && <p className="rounded bg-slate-100 p-3 text-slate-600 dark:bg-slate-900">This feedback has been submitted and is locked.</p>}
 

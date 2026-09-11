@@ -2,6 +2,7 @@ import { config } from "./config";
 import { getValidSession, markSessionExpired } from "./auth";
 import type {
   AdminUser,
+  AuditRecord,
   CandidateSummary,
   Conflict,
   FeedbackRecord,
@@ -36,23 +37,53 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   createCandidate: (body: unknown) => request("/candidates", { method: "POST", body: JSON.stringify(body) }),
-  listCandidates: (params?: { q?: string; candidateType?: string }) => {
+  updateCandidateStatus: (candidateId: string, status: "Active" | "Closed") =>
+    request<{ candidate_id: string; status: string }>(`/candidates/${encodeURIComponent(candidateId)}/status`, {
+      method: "POST",
+      body: JSON.stringify({ status }),
+    }),
+  listCandidates: (params?: { q?: string; candidateType?: string; lifecycle?: string; page?: number; pageSize?: number }) => {
     const search = new URLSearchParams({
       q: params?.q ?? "",
       candidate_type: params?.candidateType ?? "",
+      lifecycle: params?.lifecycle ?? "active",
+      page: String(params?.page ?? 1),
+      page_size: String(params?.pageSize ?? 20),
     });
-    return request<{ candidates: CandidateSummary[] }>(`/candidates?${search.toString()}`);
+    return request<{ candidates: CandidateSummary[]; page: number; page_size: number; total: number }>(`/candidates?${search.toString()}`);
   },
   createRequisition: (body: unknown) => request("/requisitions", { method: "POST", body: JSON.stringify(body) }),
-  listRequisitions: (params?: { q?: string; status?: string; openOnly?: boolean }) => {
+  updateRequisitionStatus: (requisitionId: string, status: string) =>
+    request<{ requisition_id: string; status: string }>(`/requisitions/${encodeURIComponent(requisitionId)}/status`, {
+      method: "POST",
+      body: JSON.stringify({ status }),
+    }),
+  listRequisitions: (params?: { q?: string; status?: string; openOnly?: boolean; lifecycle?: string; page?: number; pageSize?: number }) => {
     const search = new URLSearchParams({
       q: params?.q ?? "",
       status: params?.status ?? "",
       open_only: String(params?.openOnly ?? false),
+      lifecycle: params?.lifecycle ?? "active",
+      page: String(params?.page ?? 1),
+      page_size: String(params?.pageSize ?? 20),
     });
-    return request<{ requisitions: RequisitionSummary[] }>(`/requisitions?${search.toString()}`);
+    return request<{ requisitions: RequisitionSummary[]; page: number; page_size: number; total: number }>(`/requisitions?${search.toString()}`);
   },
-  listPanelMembers: () => request<{ panel_members: PanelMember[] }>("/panels/members"),
+  createPanel: (body: unknown) => request<PanelMember>("/panels", { method: "POST", body: JSON.stringify(body) }),
+  updatePanelStatus: (panelId: string, status: "Active" | "Inactive") =>
+    request<{ sub: string; status: string }>(`/panels/${encodeURIComponent(panelId)}/status`, {
+      method: "POST",
+      body: JSON.stringify({ status }),
+    }),
+  listPanelMembers: (params?: { q?: string; technology?: string; panelType?: string; includeInactive?: boolean }) => {
+    const search = new URLSearchParams({
+      q: params?.q ?? "",
+      technology: params?.technology ?? "",
+      panel_type: params?.panelType ?? "",
+      include_inactive: String(params?.includeInactive ?? false),
+    });
+    return request<{ panel_members: PanelMember[] }>(`/panels/members?${search.toString()}`);
+  },
   checkConflicts: (panelSubs: string[], startUtc: string, endUtc: string) => {
     const search = new URLSearchParams({
       panel_subs: panelSubs.join(","),
@@ -98,6 +129,7 @@ export const api = {
     request<AdminUser>(`/admin/users/${sub}/groups`, { method: "POST", body: JSON.stringify({ groups }) }),
   disableAdminUser: (sub: string) => request<AdminUser>(`/admin/users/${sub}/disable`, { method: "POST" }),
   enableAdminUser: (sub: string) => request<AdminUser>(`/admin/users/${sub}/enable`, { method: "POST" }),
+  listAudit: () => request<AuditRecord[]>("/audit"),
   getDailyInterviewsReport: (date: string, timezone = "Asia/Kolkata") =>
     request(`/reports/daily-interviews?date=${encodeURIComponent(date)}&timezone=${encodeURIComponent(timezone)}`),
   getWeeklyRequirementReport: (weekStart: string, timezone = "Asia/Kolkata") =>

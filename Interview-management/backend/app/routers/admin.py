@@ -51,7 +51,7 @@ def create_user(payload: AdminCreateUserRequest, user=CurrentUser):
     except CognitoAdminError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     for group in payload.groups:
-        cognito.add_to_group(created["sub"], group)
+        cognito.add_to_group(created["username"], group)
     repo = DynamoRepository()
     repo.put_user_profile(created["sub"], payload.email, payload.groups, "ACTIVE", 1)
     local_state.audit.append({"entity": "user", "entity_id": created["sub"], "action": "created", "actor": user.sub, "at": utc_now_iso()})
@@ -79,7 +79,7 @@ def disable_user(user_sub: str, user=CurrentUser):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     if "Administrator" in target["groups"] and _count_active_admins(users) <= 1:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Cannot disable last active administrator")
-    cognito.disable_user(user_sub)
+    cognito.disable_user(target["username"])
     repo = DynamoRepository()
     repo.set_user_status(user_sub, "DISABLED")
     new_version = repo.bump_authz_version(user_sub)
@@ -98,7 +98,11 @@ def enable_user(user_sub: str, user=CurrentUser):
         local_state.audit.append({"entity": "user", "entity_id": user_sub, "action": "enabled", "actor": user.sub, "at": utc_now_iso()})
         return target
     cognito = CognitoAdmin()
-    cognito.enable_user(user_sub)
+    users = cognito.list_users()
+    target = next((u for u in users if u["sub"] == user_sub), None)
+    if not target:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    cognito.enable_user(target["username"])
     repo = DynamoRepository()
     repo.set_user_status(user_sub, "ACTIVE")
     local_state.audit.append({"entity": "user", "entity_id": user_sub, "action": "enabled", "actor": user.sub, "at": utc_now_iso()})
@@ -126,7 +130,7 @@ def set_groups(user_sub: str, payload: AdminUpdateGroupsRequest, user=CurrentUse
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     if "Administrator" in target["groups"] and "Administrator" not in payload.groups and _count_active_admins(users) <= 1:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Cannot remove last active administrator")
-    cognito.set_groups(user_sub, payload.groups)
+    cognito.set_groups(target["username"], payload.groups)
     repo = DynamoRepository()
     new_version = repo.bump_authz_version(user_sub)
     local_state.audit.append({"entity": "user", "entity_id": user_sub, "action": "groups_updated", "actor": user.sub, "at": utc_now_iso()})

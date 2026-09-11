@@ -79,7 +79,17 @@ def schedule_interview(payload: ScheduleInterviewRequest, user=CurrentUser):
                 "project": req["project"],
             }
         )
-        local_state.audit.append({"entity": "interview", "action": "scheduled", "entity_id": interview.interview_id, "actor": user.sub})
+        local_state.audit.append(
+            {
+                "entity": "interview",
+                "action": "scheduled",
+                "entity_id": interview.interview_id,
+                "actor_sub": user.sub,
+                "actor_email": user.email or "",
+                "actor_roles": sorted(role.value for role in user.groups),
+                "at": utc_now_iso(),
+            }
+        )
         return interview.__dict__
     repo = DynamoRepository()
     department, project = repo.get_requisition_scope(payload.requisition_id)
@@ -104,6 +114,8 @@ def schedule_interview(payload: ScheduleInterviewRequest, user=CurrentUser):
         instructions=payload.instructions,
         required_skills=payload.required_skills,
         actor_sub=user.sub,
+        actor_email=user.email or "",
+        actor_roles=sorted(role.value for role in user.groups),
         idempotency_key=payload.idempotency_key,
     )
     try:

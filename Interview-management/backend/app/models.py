@@ -33,10 +33,26 @@ class CandidateType(str, Enum):
     EXTERNAL = "External"
 
 
+class CandidateStatus(str, Enum):
+    ACTIVE = "Active"
+    CLOSED = "Closed"
+
+
+class PanelType(str, Enum):
+    INTERNAL = "Internal"
+    EXTERNAL = "External"
+
+
+class PanelStatus(str, Enum):
+    ACTIVE = "Active"
+    INACTIVE = "Inactive"
+
+
 class RequisitionStatus(str, Enum):
     INTAKE_RECEIVED = "Intake Received"
     INTAKE_REVIEW = "Intake Review"
     APPROVED = "Approved"
+    OPEN = "Open"
     SOURCING = "Sourcing"
     INTERVIEWING = "Interviewing"
     OFFER = "Offer"
@@ -51,7 +67,7 @@ class AuthContext(BaseModel):
     email: str | None = None
     groups: set[Role] = Field(default_factory=set)
     token_use: str = "access"
-    authz_version: int = 0
+    authz_version: int | None = None
 
 
 class ErrorResponse(BaseModel):
@@ -86,6 +102,25 @@ class CandidateUpsertRequest(BaseModel):
     resume_s3_key: str | None = None
 
 
+class CandidateStatusUpdateRequest(BaseModel):
+    status: CandidateStatus
+
+
+class PanelCreateRequest(BaseModel):
+    full_name: str = Field(min_length=1)
+    email: str = Field(min_length=3)
+    phone: str | None = None
+    panel_type: PanelType
+    technologies: list[str] = Field(min_length=1)
+    experience_years: float = Field(ge=0)
+    designation: str | None = None
+    organization: str | None = None
+
+
+class PanelStatusUpdateRequest(BaseModel):
+    status: PanelStatus
+
+
 class RequisitionUpsertRequest(BaseModel):
     requisition_id: str
     title: str
@@ -116,6 +151,10 @@ class RequisitionUpsertRequest(BaseModel):
         if self.positions_filled > self.positions_total:
             raise ValueError("positions_filled cannot exceed positions_total")
         return self
+
+
+class RequisitionStatusUpdateRequest(BaseModel):
+    status: RequisitionStatus
 
 
 class ScheduleInterviewRequest(BaseModel):

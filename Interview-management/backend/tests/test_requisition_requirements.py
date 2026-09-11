@@ -16,7 +16,7 @@ def _override(user: AuthContext):
 def test_requisition_captures_intake_and_client_details(monkeypatch) -> None:
     monkeypatch.setattr(config.settings, "demo_mode", True)
     app.dependency_overrides[get_current_user] = _override(
-        AuthContext(sub="demo-ta-1", groups={Role.TA}, token_use="access", authz_version=1)
+        AuthContext(sub="demo-ta-1", email="ta@example.com", groups={Role.TA}, token_use="access", authz_version=1)
     )
     client = TestClient(app)
     payload = {
@@ -62,5 +62,41 @@ def test_requisition_rejects_invalid_position_counts(monkeypatch) -> None:
     }
     response = client.post("/requisitions", json=payload)
     assert response.status_code == 422
+    app.dependency_overrides.clear()
+
+
+def test_requisition_status_can_be_changed(monkeypatch) -> None:
+    monkeypatch.setattr(config.settings, "demo_mode", True)
+    app.dependency_overrides[get_current_user] = _override(
+        AuthContext(sub="demo-ta-1", email="ta@example.com", groups={Role.TA}, token_use="access", authz_version=1)
+    )
+    client = TestClient(app)
+    create_response = client.post(
+        "/requisitions",
+        json={
+            "requisition_id": "REQ-STATUS",
+            "title": "Platform Engineer",
+            "department": "Engineering",
+            "project": "Core",
+            "hiring_manager_sub": "demo-manager-1",
+            "status": "Open",
+            "intake_received_at_utc": "2026-09-11T06:30:00Z",
+            "positions_total": 1,
+            "positions_filled": 0,
+            "client_name": "Contoso Ltd",
+        },
+    )
+    assert create_response.status_code == 201
+
+    response = client.post("/requisitions/REQ-STATUS/status", json={"status": "On Hold"})
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "On Hold"
+    from app.state import local_state
+
+    audit = local_state.audit[-1]
+    assert audit["actor_email"] == "ta@example.com"
+    assert audit["actor_roles"] == ["TA"]
+    assert audit["changes"] == "status=On Hold"
     app.dependency_overrides.clear()
 

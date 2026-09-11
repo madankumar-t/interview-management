@@ -11,6 +11,8 @@ describe("Sidebar", () => {
       </MemoryRouter>
     );
     expect(screen.queryByText("User Management")).toBeNull();
-    expect(screen.getByText("Candidates")).not.toBeNull();
+    expect(screen.getByText("Candidate List")).not.toBeNull();
+    expect(screen.getByText("Add Candidate")).not.toBeNull();
+    expect(screen.getByText("Panel Management")).not.toBeNull();
   });
 });
