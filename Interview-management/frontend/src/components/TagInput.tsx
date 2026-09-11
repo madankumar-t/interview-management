@@ -81,8 +81,13 @@ export function TagInput({
           placeholder="Add a skill and press Enter"
           value={input}
           onChange={(event) => setInput(event.target.value)}
+          onBlur={() => {
+            if (input.trim()) {
+              addTag(input);
+            }
+          }}
           onKeyDown={(event) => {
-            if (event.key === "Enter" || event.key === ",") {
+            if (event.key === "Enter" || event.key === "," || event.key === "Tab") {
               event.preventDefault();
               addTag(input);
             }

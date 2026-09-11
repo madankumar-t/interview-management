@@ -97,7 +97,7 @@ export function PanelsPage() {
           <input name="designation" className="rounded border p-2 dark:border-slate-700 dark:bg-slate-900" placeholder="Designation (optional)" />
           <input name="organization" className="rounded border p-2 dark:border-slate-700 dark:bg-slate-900" placeholder="Organization / business unit" />
           <div className="md:col-span-2"><TagInput label="Technologies" tags={technologies} onChange={setTechnologies} /></div>
-          <button className="rounded bg-indigo-600 px-4 py-2 text-white disabled:opacity-40 md:w-fit" disabled={saving || technologies.length === 0}>
+          <button type="submit" className="rounded bg-indigo-600 px-4 py-2 text-white disabled:opacity-40 md:w-fit" disabled={saving || technologies.length === 0}>
             {saving ? "Adding..." : "Add Panel Member"}
           </button>
         </form>
