@@ -28,6 +28,12 @@ export interface Interview {
   project: string;
   panel_subs: string[];
   lead_panel_sub: string;
+  round_name: string;
+  interview_type: string;
+  mode: string;
+  meeting_url: string | null;
+  venue: string | null;
+  instructions: string | null;
   start_utc: string;
   end_utc: string;
   timezone: string;
@@ -64,3 +70,66 @@ export interface RequirementOverview {
   };
   requirements: RequirementReportRow[];
 }
+
+export interface CandidateSummary {
+  candidate_id: string;
+  full_name: string;
+  email: string;
+  phone: string;
+  candidate_type: "Internal" | "External";
+  department: string;
+  project: string;
+}
+
+export interface RequisitionSummary {
+  requisition_id: string;
+  title: string;
+  client_name: string;
+  status: string;
+  positions_total: number;
+  positions_filled: number;
+  positions_open: number;
+  department: string;
+  project: string;
+}
+
+export interface PanelMember {
+  sub: string;
+  email: string;
+  skills: string[];
+  availability_slots: number;
+}
+
+export interface InterviewListItem extends Interview {
+  requisition_title: string;
+  client_name: string;
+  candidate_name: string;
+}
+
+export interface Conflict {
+  panel_subs: string[];
+  interview_id: string;
+  start_utc: string;
+  end_utc: string;
+}
+
+export interface FeedbackRecord {
+  interview_id: string;
+  competency_scores: Record<string, number>;
+  strengths: string;
+  improvement_areas: string;
+  recommendation: string;
+  comments: string;
+  author_sub: string;
+  status: "Draft" | "Submitted";
+}
+
+export interface AdminUser {
+  sub: string;
+  email: string;
+  full_name?: string;
+  groups: string[];
+  status: "ACTIVE" | "DISABLED";
+  authz_version: number;
+}
+

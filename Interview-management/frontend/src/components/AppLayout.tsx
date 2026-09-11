@@ -31,7 +31,7 @@ export function AppLayout({ session, onLogout }: { session: UserSession; onLogou
                 setIsDark((prev) => !prev);
               }}
             >
-              {isDark ? "Light Blue Mode" : "Black Mode"}
+              {isDark ? "Light Mode" : "Dark Mode"}
             </button>
             <button
               className="rounded bg-slate-800 px-3 py-2 text-white"

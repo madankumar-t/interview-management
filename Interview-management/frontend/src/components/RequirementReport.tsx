@@ -13,11 +13,29 @@ const initialFilters = {
   openOnly: true,
 };
 
+function describeError(reason: unknown): string {
+  const message = reason instanceof Error ? reason.message : String(reason);
+  if (message.startsWith("401")) {
+    return "Your session has expired. Please log in again.";
+  }
+  if (message.startsWith("403")) {
+    return "You are not authorized to view this data.";
+  }
+  if (/failed to fetch/i.test(message) || /networkerror/i.test(message)) {
+    return "Unable to reach the server. Check your connection and try again.";
+  }
+  if (message.startsWith("5")) {
+    return "The server encountered an error while loading requirements. Please try again.";
+  }
+  return "Unable to load requirements.";
+}
+
 export function RequirementReport({ showInterviewMetrics = true }: RequirementReportProps) {
   const [filters, setFilters] = useState(initialFilters);
   const [overview, setOverview] = useState<RequirementOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [retryToken, setRetryToken] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -28,11 +46,13 @@ export function RequirementReport({ showInterviewMetrics = true }: RequirementRe
       .then((data) => {
         if (active) {
           setOverview(data);
+          setError("");
         }
       })
       .catch((reason: unknown) => {
         if (active) {
-          setError(reason instanceof Error ? reason.message : String(reason));
+          setOverview(null);
+          setError(describeError(reason));
         }
       })
       .finally(() => {
@@ -43,9 +63,20 @@ export function RequirementReport({ showInterviewMetrics = true }: RequirementRe
     return () => {
       active = false;
     };
-  }, [filters]);
+  }, [filters, retryToken]);
 
+  const hasError = Boolean(error);
   const summary = overview?.summary;
+
+  function formatMetric(value: number | undefined): string {
+    if (loading) {
+      return "…";
+    }
+    if (hasError) {
+      return "—";
+    }
+    return String(value ?? 0);
+  }
 
   return (
     <div className="space-y-5">
@@ -87,18 +118,31 @@ export function RequirementReport({ showInterviewMetrics = true }: RequirementRe
         </label>
       </div>
 
-      {error && <p role="alert" className="rounded bg-red-50 p-3 text-red-700">{error}</p>}
+      {error && (
+        <div role="alert" className="flex items-center justify-between gap-3 rounded bg-red-50 p-3 text-red-700">
+          <span>{error}</span>
+          <button
+            type="button"
+            className="shrink-0 rounded bg-red-700 px-3 py-1 text-sm font-medium text-white hover:bg-red-800 focus:outline-none focus:ring-2 focus:ring-red-400"
+            onClick={() => setRetryToken((current) => current + 1)}
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {[
-          ["Open Requirements", summary?.open_requirements],
-          ["Open Positions", summary?.open_positions],
-          ["Clients", summary?.clients],
-          ["Upcoming Interviews", summary?.upcoming_interviews],
-        ].map(([label, value]) => (
-          <article key={String(label)} className="rounded-lg border border-sky-200 bg-sky-50 p-4 dark:border-sky-900 dark:bg-slate-900">
+        {(
+          [
+            ["Open Requirements", summary?.open_requirements],
+            ["Open Positions", summary?.open_positions],
+            ["Clients", summary?.clients],
+            ["Upcoming Interviews", summary?.upcoming_interviews],
+          ] as const
+        ).map(([label, value]) => (
+          <article key={label} className="rounded-lg border border-sky-200 bg-sky-50 p-4 dark:border-sky-900 dark:bg-slate-900">
             <p className="text-sm text-slate-600 dark:text-slate-300">{label}</p>
-            <p className="mt-1 text-3xl font-semibold text-sky-800 dark:text-sky-300">{loading ? "--" : value ?? 0}</p>
+            <p className="mt-1 text-3xl font-semibold text-sky-800 dark:text-sky-300">{formatMetric(value)}</p>
           </article>
         ))}
       </div>
@@ -135,10 +179,17 @@ export function RequirementReport({ showInterviewMetrics = true }: RequirementRe
                 {showInterviewMetrics && <td className="p-3 text-right">{row.pending_feedback}</td>}
               </tr>
             ))}
-            {!loading && overview?.requirements.length === 0 && (
+            {!loading && hasError && (
+              <tr>
+                <td className="p-6 text-center text-red-700" colSpan={showInterviewMetrics ? 9 : 5}>
+                  Unable to load requirements.
+                </td>
+              </tr>
+            )}
+            {!loading && !hasError && overview?.requirements.length === 0 && (
               <tr>
                 <td className="p-6 text-center text-slate-500" colSpan={showInterviewMetrics ? 9 : 5}>
-                  No requirements match the selected filters.
+                  No requirements match your filters.
                 </td>
               </tr>
             )}

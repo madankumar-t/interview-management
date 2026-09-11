@@ -287,8 +287,17 @@ resource "aws_iam_role_policy" "lambda" {
         Resource = "${aws_s3_bucket.documents.arn}/*"
       },
       {
-        Effect   = "Allow"
-        Action   = ["cognito-idp:AdminGetUser", "cognito-idp:AdminAddUserToGroup", "cognito-idp:AdminRemoveUserFromGroup", "cognito-idp:AdminDisableUser", "cognito-idp:AdminEnableUser"]
+        Effect = "Allow"
+        Action = [
+          "cognito-idp:AdminGetUser",
+          "cognito-idp:AdminCreateUser",
+          "cognito-idp:AdminAddUserToGroup",
+          "cognito-idp:AdminRemoveUserFromGroup",
+          "cognito-idp:AdminListGroupsForUser",
+          "cognito-idp:AdminDisableUser",
+          "cognito-idp:AdminEnableUser",
+          "cognito-idp:ListUsers",
+        ]
         Resource = aws_cognito_user_pool.main.arn
       }
     ]
@@ -350,6 +359,16 @@ resource "aws_apigatewayv2_route" "proxy" {
   target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
   authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
   authorization_type = "JWT"
+}
+
+# CORS preflight requests never carry an Authorization header, so they need their own
+# unauthenticated route or the JWT authorizer rejects them with 401 before the browser
+# ever sends the real request.
+resource "aws_apigatewayv2_route" "proxy_options" {
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = "OPTIONS /{proxy+}"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorization_type = "NONE"
 }
 
 resource "aws_apigatewayv2_route" "health" {

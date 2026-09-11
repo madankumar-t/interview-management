@@ -19,7 +19,7 @@ def test_only_admin_can_change_groups(monkeypatch) -> None:
         AuthContext(sub="demo-ta-1", groups={Role.TA}, token_use="access", authz_version=1)
     )
     client = TestClient(app)
-    response = client.post("/admin/users/demo-panel-1/groups", json=["Panel"])
+    response = client.post("/admin/users/demo-panel-1/groups", json={"groups": ["Panel"]})
     assert response.status_code == 403
     app.dependency_overrides.clear()
 

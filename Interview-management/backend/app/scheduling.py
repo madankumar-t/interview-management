@@ -29,6 +29,13 @@ class Interview:
     start_utc: datetime
     end_utc: datetime
     timezone: str
+    round_name: str = ""
+    interview_type: str = ""
+    mode: str = ""
+    meeting_url: str | None = None
+    venue: str | None = None
+    instructions: str | None = None
+    required_skills: list[str] = field(default_factory=list)
     status: str = "Scheduled"
     version: int = 1
     history: list[dict] = field(default_factory=list)
@@ -160,6 +167,13 @@ class SchedulingService:
             start_utc=start_utc,
             end_utc=end_utc,
             timezone=payload["timezone"],
+            round_name=payload.get("round_name", ""),
+            interview_type=payload.get("interview_type", ""),
+            mode=payload.get("mode", ""),
+            meeting_url=payload.get("meeting_url"),
+            venue=payload.get("venue"),
+            instructions=payload.get("instructions"),
+            required_skills=payload.get("required_skills", []),
         )
         return self.store.create(interview, payload["idempotency_key"])
 

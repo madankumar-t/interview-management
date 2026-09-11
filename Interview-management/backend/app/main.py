@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from mangum import Mangum
 
 from app.config import settings
-from app.routers import admin, audit, availability, candidates, feedback, interviews, reports, requisitions
+from app.routers import admin, audit, availability, candidates, feedback, interviews, panels, reports, requisitions
 
 app = FastAPI(
     title="Interview Management API",
@@ -25,6 +25,7 @@ app.include_router(requisitions.router)
 app.include_router(interviews.router)
 app.include_router(feedback.router)
 app.include_router(availability.router)
+app.include_router(panels.router)
 app.include_router(reports.router)
 app.include_router(admin.router)
 app.include_router(audit.router)

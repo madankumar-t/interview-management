@@ -29,6 +29,28 @@ def upsert_requisition(payload: RequisitionUpsertRequest, user=CurrentUser):
     return record
 
 
+@router.get("")
+def list_requisitions(user=CurrentUser, q: str = "", status: str = "", open_only: bool = False):
+    require_capability(user, Capability.VIEW_INTERVIEWS)
+    if settings.demo_mode:
+        records = list(local_state.requisitions.values())
+    else:
+        records = DynamoRepository().list_requisitions()
+    needle = q.casefold().strip()
+    results = [
+        record
+        for record in records
+        if (not status or record.get("status") == status)
+        and (not open_only or int(record.get("positions_open", 0)) > 0)
+        and (
+            not needle
+            or needle in f"{record.get('title', '')} {record.get('requisition_id', '')} {record.get('client_name', '')}".casefold()
+        )
+    ]
+    results.sort(key=lambda item: item.get("requisition_id", ""))
+    return {"requisitions": results}
+
+
 @router.get("/{requisition_id}")
 def get_requisition(requisition_id: str, user=CurrentUser):
     require_capability(user, Capability.VIEW_INTERVIEWS)

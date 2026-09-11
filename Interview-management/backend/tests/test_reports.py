@@ -117,7 +117,7 @@ def test_daily_and_weekly_reports_by_requirement(monkeypatch) -> None:
 def test_production_overview_uses_dynamodb_records(monkeypatch) -> None:
     monkeypatch.setattr(config.settings, "demo_mode", False)
     monkeypatch.setattr(
-        "app.routers.reports.DynamoRepository.list_reporting_records",
+        "app.records.DynamoRepository.list_reporting_records",
         lambda _self: (
             [
                 {

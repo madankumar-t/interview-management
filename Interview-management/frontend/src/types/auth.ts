@@ -5,5 +5,7 @@ export interface UserSession {
   email: string;
   groups: Role[];
   accessToken: string;
+  refreshToken?: string;
+  expiresAt?: number;
 }
 

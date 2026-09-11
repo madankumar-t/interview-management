@@ -5,16 +5,12 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from fastapi import APIRouter, HTTPException, Query, status
 
 from app.auth import CurrentUser
-from app.config import settings
-from app.deps import manager_scopes_for, require_capability
+from app.deps import require_capability
 from app.models import Role
 from app.permissions import Capability
-from app.repository import DynamoRepository
-from app.state import local_state
+from app.records import CLOSED_REQUIREMENT_STATUSES, visible_records
 
 router = APIRouter(prefix="/reports", tags=["reports"])
-
-CLOSED_REQUIREMENT_STATUSES = {"Filled", "Cancelled", "Closed"}
 
 
 def _resolve_timezone(timezone_name: str):
@@ -32,43 +28,6 @@ def _parse_datetime(value: str | datetime) -> datetime:
 
 def _to_local_date(start_utc: str | datetime, timezone_name: str) -> date:
     return _parse_datetime(start_utc).astimezone(_resolve_timezone(timezone_name)).date()
-
-
-def _reporting_records() -> tuple[list[dict], list[dict]]:
-    if not settings.demo_mode:
-        return DynamoRepository().list_reporting_records()
-    requisitions = list(local_state.requisitions.values())
-    interviews = [
-        {
-            "interview_id": interview.interview_id,
-            "requisition_id": interview.requisition_id,
-            "candidate_id": interview.candidate_id,
-            "department": interview.department,
-            "project": interview.project,
-            "panel_subs": interview.panel_subs,
-            "start_utc": interview.start_utc,
-            "end_utc": interview.end_utc,
-            "status": interview.status,
-            "feedback_status": "Not Started",
-        }
-        for interview in local_state.scheduling_store.interviews.values()
-    ]
-    return requisitions, interviews
-
-
-def _visible_records(user) -> tuple[list[dict], list[dict]]:
-    requisitions, interviews = _reporting_records()
-    if Role.ADMINISTRATOR in user.groups or Role.TA in user.groups:
-        return requisitions, interviews
-    if Role.PANEL in user.groups:
-        visible_interviews = [item for item in interviews if user.sub in item["panel_subs"]]
-        visible_ids = {item["requisition_id"] for item in visible_interviews}
-        return [item for item in requisitions if item["requisition_id"] in visible_ids], visible_interviews
-    if Role.MANAGER in user.groups:
-        scopes = manager_scopes_for(user)
-        in_scope = lambda item: f"{item.get('department', '')}#{item.get('project', '')}" in scopes
-        return [item for item in requisitions if in_scope(item)], [item for item in interviews if in_scope(item)]
-    return [], []
 
 
 def _matches_requirement(
@@ -133,7 +92,7 @@ def overview(
     timezone_name: str = Query(alias="timezone", default="Asia/Kolkata"),
 ):
     require_capability(user, Capability.VIEW_REPORTS)
-    requisitions, interviews = _visible_records(user)
+    requisitions, interviews = visible_records(user)
     requirements = [
         row
         for row in _requirement_rows(requisitions, interviews)
@@ -175,7 +134,7 @@ def overview(
 @router.get("/workload")
 def workload(user=CurrentUser):
     require_capability(user, Capability.VIEW_REPORTS)
-    _, interviews = _visible_records(user)
+    _, interviews = visible_records(user)
     own = [item for item in interviews if user.sub in item["panel_subs"]]
     return {"total_interviews": len(interviews), "my_interviews": len(own)}
 
@@ -191,7 +150,7 @@ def daily_interviews(
         selected_date = date.fromisoformat(report_date) if report_date else datetime.now(_resolve_timezone(timezone_name)).date()
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid date format. Use YYYY-MM-DD") from exc
-    requisitions, interviews = _visible_records(user)
+    requisitions, interviews = visible_records(user)
     requisitions_by_id = {item["requisition_id"]: item for item in requisitions}
     grouped: dict[str, dict] = {}
     rows: list[dict] = []
@@ -231,7 +190,7 @@ def weekly_requirement(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid week_start format. Use YYYY-MM-DD") from exc
     end_date = start_date + timedelta(days=7)
-    requisitions, interviews = _visible_records(user)
+    requisitions, interviews = visible_records(user)
     weekly_interviews = [
         item
         for item in interviews

@@ -28,6 +28,14 @@ export function clearSession(): void {
   localStorage.removeItem(SESSION_KEY);
 }
 
+export const SESSION_EXPIRED_EVENT = "ims-session-expired";
+
+export function markSessionExpired(): void {
+  clearSession();
+  window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+}
+
+
 export function login(): void {
   if (config.demoMode) {
     setSession({
@@ -83,7 +91,7 @@ export async function handleAuthCallback(): Promise<UserSession | null> {
   if (!tokenResponse.ok) {
     return null;
   }
-  const tokenJson = (await tokenResponse.json()) as { access_token: string };
+  const tokenJson = (await tokenResponse.json()) as { access_token: string; refresh_token?: string; expires_in?: number };
   const accessToken = tokenJson.access_token;
   const claims = parseJwt(accessToken);
   const rawGroups = claims["cognito:groups"];
@@ -93,10 +101,72 @@ export async function handleAuthCallback(): Promise<UserSession | null> {
     email: String(claims.email ?? ""),
     groups,
     accessToken,
+    refreshToken: tokenJson.refresh_token,
+    expiresAt: Date.now() + (tokenJson.expires_in ?? 3600) * 1000,
   };
   setSession(session);
   window.history.replaceState({}, "", "/");
   return session;
+}
+
+let refreshPromise: Promise<UserSession | null> | null = null;
+
+async function refreshAccessToken(session: UserSession): Promise<UserSession | null> {
+  if (!session.refreshToken) {
+    return null;
+  }
+  const tokenResponse = await fetch(`https://${config.cognitoDomain}/oauth2/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      client_id: config.cognitoClientId,
+      refresh_token: session.refreshToken,
+    }),
+  });
+  if (!tokenResponse.ok) {
+    return null;
+  }
+  const tokenJson = (await tokenResponse.json()) as { access_token: string; expires_in?: number };
+  const accessToken = tokenJson.access_token;
+  const claims = parseJwt(accessToken);
+  const rawGroups = claims["cognito:groups"];
+  const groups = (Array.isArray(rawGroups) ? rawGroups : []) as UserSession["groups"];
+  const next: UserSession = {
+    ...session,
+    groups,
+    accessToken,
+    // Cognito does not rotate refresh tokens by default, so keep reusing the original.
+    expiresAt: Date.now() + (tokenJson.expires_in ?? 3600) * 1000,
+  };
+  setSession(next);
+  return next;
+}
+
+/** Returns a session with a valid (non-expired) access token, refreshing it silently if needed. */
+export async function getValidSession(): Promise<UserSession | null> {
+  const session = getSession();
+  if (!session) {
+    return null;
+  }
+  if (config.demoMode || !session.expiresAt) {
+    return session;
+  }
+  const expiresInMs = session.expiresAt - Date.now();
+  if (expiresInMs > 60_000) {
+    return session;
+  }
+  if (!refreshPromise) {
+    refreshPromise = refreshAccessToken(session).finally(() => {
+      refreshPromise = null;
+    });
+  }
+  const refreshed = await refreshPromise;
+  if (!refreshed) {
+    markSessionExpired();
+    return null;
+  }
+  return refreshed;
 }
 
 export function logout(): void {

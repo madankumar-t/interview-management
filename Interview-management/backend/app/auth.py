@@ -9,7 +9,15 @@ from app.models import AuthContext, Role
 def _parse_groups(raw: str | list[str] | None) -> set[Role]:
     if raw is None:
         return set()
-    names = raw if isinstance(raw, list) else [g.strip() for g in raw.split(",") if g.strip()]
+    if isinstance(raw, list):
+        names = raw
+    else:
+        # API Gateway's HTTP API JWT authorizer serializes array claims (like cognito:groups)
+        # as "[Administrator]" or "[Administrator Manager]" instead of JSON or CSV.
+        cleaned = raw.strip()
+        if cleaned.startswith("[") and cleaned.endswith("]"):
+            cleaned = cleaned[1:-1]
+        names = [part.strip() for part in cleaned.replace(",", " ").split() if part.strip()]
     parsed: set[Role] = set()
     for name in names:
         for role in Role:

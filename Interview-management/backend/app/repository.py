@@ -110,6 +110,56 @@ class DynamoRepository:
         )
         return {item["scope"]["S"] for item in result.get("Items", [])}
 
+    def get_user_profile(self, sub: str) -> dict[str, Any] | None:
+        response = self.client.get_item(
+            TableName=self.table_name,
+            Key={"pk": {"S": f"USER#{sub}"}, "sk": {"S": "PROFILE"}},
+            ConsistentRead=True,
+        )
+        item = response.get("Item")
+        if not item:
+            return None
+        return {
+            "sub": sub,
+            "status": item.get("status", {}).get("S", "ACTIVE"),
+            "authz_version": int(item.get("authz_version", {}).get("N", "0")),
+        }
+
+    def put_user_profile(self, sub: str, email: str, groups: list[str], status_value: str, authz_version: int) -> None:
+        self.client.put_item(
+            TableName=self.table_name,
+            Item={
+                "pk": {"S": f"USER#{sub}"},
+                "sk": {"S": "PROFILE"},
+                "entity_type": {"S": "user"},
+                "sub": {"S": sub},
+                "email": {"S": email},
+                "groups": {"SS": groups or ["__none__"]},
+                "status": {"S": status_value},
+                "authz_version": {"N": str(authz_version)},
+                "updated_at": {"S": utc_now_iso()},
+            },
+        )
+
+    def set_user_status(self, sub: str, status_value: str) -> None:
+        self.client.update_item(
+            TableName=self.table_name,
+            Key={"pk": {"S": f"USER#{sub}"}, "sk": {"S": "PROFILE"}},
+            UpdateExpression="SET #status = :status",
+            ExpressionAttributeNames={"#status": "status"},
+            ExpressionAttributeValues={":status": {"S": status_value}},
+        )
+
+    def bump_authz_version(self, sub: str) -> int:
+        response = self.client.update_item(
+            TableName=self.table_name,
+            Key={"pk": {"S": f"USER#{sub}"}, "sk": {"S": "PROFILE"}},
+            UpdateExpression="SET authz_version = if_not_exists(authz_version, :zero) + :one",
+            ExpressionAttributeValues={":zero": {"N": "0"}, ":one": {"N": "1"}},
+            ReturnValues="UPDATED_NEW",
+        )
+        return int(response["Attributes"]["authz_version"]["N"])
+
     def list_reporting_records(self) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         requisitions: list[dict[str, Any]] = []
         interviews: list[dict[str, Any]] = []
@@ -118,11 +168,6 @@ class DynamoRepository:
             request: dict[str, Any] = {
                 "TableName": self.table_name,
                 "FilterExpression": "#entity_type IN (:requisition, :interview)",
-                "ExpressionAttributeNames": {
-                    "#entity_type": "entity_type",
-                    "#status": "status",
-                    "#project": "project",
-                },
                 "ExpressionAttributeValues": {
                     ":requisition": {"S": "requisition"},
                     ":interview": {"S": "interview"},
@@ -130,8 +175,17 @@ class DynamoRepository:
                 "ProjectionExpression": (
                     "pk, #entity_type, requisition_id, title, client_name, #status, "
                     "positions_total, positions_filled, positions_open, department, #project, "
-                    "candidate_id, panel_subs, start_utc, end_utc, feedback_status"
+                    "candidate_id, panel_subs, lead_panel_sub, round_name, interview_type, #mode, "
+                    "meeting_url, venue, instructions, start_utc, end_utc, #timezone, #version, feedback_status"
                 ),
+                "ExpressionAttributeNames": {
+                    "#entity_type": "entity_type",
+                    "#status": "status",
+                    "#project": "project",
+                    "#timezone": "timezone",
+                    "#mode": "mode",
+                    "#version": "version",
+                },
             }
             if exclusive_start_key:
                 request["ExclusiveStartKey"] = exclusive_start_key
@@ -161,8 +215,17 @@ class DynamoRepository:
                             "department": item.get("department", {}).get("S", ""),
                             "project": item.get("project", {}).get("S", ""),
                             "panel_subs": item.get("panel_subs", {}).get("SS", []),
+                            "lead_panel_sub": item.get("lead_panel_sub", {}).get("S", ""),
+                            "round_name": item.get("round_name", {}).get("S", ""),
+                            "interview_type": item.get("interview_type", {}).get("S", ""),
+                            "mode": item.get("mode", {}).get("S", ""),
+                            "meeting_url": item.get("meeting_url", {}).get("S", ""),
+                            "venue": item.get("venue", {}).get("S", ""),
+                            "instructions": item.get("instructions", {}).get("S", ""),
                             "start_utc": item["start_utc"]["S"],
                             "end_utc": item["end_utc"]["S"],
+                            "timezone": item.get("timezone", {}).get("S", ""),
+                            "version": int(item.get("version", {}).get("N", "1")),
                             "status": item.get("status", {}).get("S", ""),
                             "feedback_status": item.get("feedback_status", {}).get("S", "Not Started"),
                         }
@@ -225,6 +288,41 @@ class DynamoRepository:
                 "updated_by": {"S": actor_sub},
             },
         )
+
+    def list_candidates(self) -> list[dict[str, Any]]:
+        candidates: list[dict[str, Any]] = []
+        exclusive_start_key: dict[str, Any] | None = None
+        while True:
+            request: dict[str, Any] = {
+                "TableName": self.table_name,
+                "FilterExpression": "entity_type = :candidate",
+                "ExpressionAttributeValues": {":candidate": {"S": "candidate"}},
+                "ProjectionExpression": "candidate_id, full_name, email, phone, candidate_type, department, #project",
+                "ExpressionAttributeNames": {"#project": "project"},
+            }
+            if exclusive_start_key:
+                request["ExclusiveStartKey"] = exclusive_start_key
+            response = self.client.scan(**request)
+            for item in response.get("Items", []):
+                candidates.append(
+                    {
+                        "candidate_id": item["candidate_id"]["S"],
+                        "full_name": item.get("full_name", {}).get("S", ""),
+                        "email": item.get("email", {}).get("S", ""),
+                        "phone": item.get("phone", {}).get("S", ""),
+                        "candidate_type": item.get("candidate_type", {}).get("S", ""),
+                        "department": item.get("department", {}).get("S", ""),
+                        "project": item.get("project", {}).get("S", ""),
+                    }
+                )
+            exclusive_start_key = response.get("LastEvaluatedKey")
+            if not exclusive_start_key:
+                break
+        return candidates
+
+    def list_requisitions(self) -> list[dict[str, Any]]:
+        requisitions, _ = self.list_reporting_records()
+        return requisitions
 
     def get_requisition_scope(self, requisition_id: str) -> tuple[str, str]:
         result = self.client.get_item(

@@ -3,6 +3,9 @@ frontend/dist/
 backend/.venv/
 backend/__pycache__/
 backend/.pytest_cache/
+backend/package/
+backend/build/
+backend/interview_backend.egg-info/
 **/__pycache__/
 artifacts/
 .terraform/

@@ -173,5 +173,35 @@ class FeedbackSubmitRequest(BaseModel):
     interview_id: str
 
 
+class AdminCreateUserRequest(BaseModel):
+    email: str
+    full_name: str | None = None
+    groups: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_groups(self) -> "AdminCreateUserRequest":
+        if not self.groups:
+            raise ValueError("At least one role is required")
+        valid = {role.value for role in Role}
+        invalid = [group for group in self.groups if group not in valid]
+        if invalid:
+            raise ValueError(f"Invalid roles: {invalid}")
+        return self
+
+
+class AdminUpdateGroupsRequest(BaseModel):
+    groups: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_groups(self) -> "AdminUpdateGroupsRequest":
+        if not self.groups:
+            raise ValueError("At least one role is required")
+        valid = {role.value for role in Role}
+        invalid = [group for group in self.groups if group not in valid]
+        if invalid:
+            raise ValueError(f"Invalid roles: {invalid}")
+        return self
+
+
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()

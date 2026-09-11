@@ -3,45 +3,132 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, status
 
 from app.auth import CurrentUser
+from app.config import settings
 from app.deps import require_admin
-from app.models import utc_now_iso
+from app.identity import CognitoAdmin, CognitoAdminError
+from app.models import AdminCreateUserRequest, AdminUpdateGroupsRequest, utc_now_iso
+from app.repository import DynamoRepository
 from app.state import local_state
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
+def _is_active(record: dict) -> bool:
+    return record.get("status", "ACTIVE" if record.get("enabled", True) else "DISABLED") == "ACTIVE"
+
+
+def _count_active_admins(users: list[dict]) -> int:
+    return sum(1 for u in users if "Administrator" in u.get("groups", []) and _is_active(u))
+
+
 @router.get("/users")
 def list_users(user=CurrentUser):
     require_admin(user)
-    return list(local_state.users.values())
+    if settings.demo_mode:
+        return list(local_state.users.values())
+    cognito = CognitoAdmin()
+    repo = DynamoRepository()
+    users = cognito.list_users()
+    for record in users:
+        profile = repo.get_user_profile(record["sub"]) if record["sub"] else None
+        record["status"] = "ACTIVE" if record["enabled"] else "DISABLED"
+        record["authz_version"] = profile["authz_version"] if profile else 0
+    return users
+
+
+@router.post("/users", status_code=201)
+def create_user(payload: AdminCreateUserRequest, user=CurrentUser):
+    require_admin(user)
+    if settings.demo_mode:
+        sub = f"demo-user-{len(local_state.users) + 1}"
+        record = {"sub": sub, "email": payload.email, "groups": payload.groups, "status": "ACTIVE", "authz_version": 1}
+        local_state.users[sub] = record
+        local_state.audit.append({"entity": "user", "entity_id": sub, "action": "created", "actor": user.sub, "at": utc_now_iso()})
+        return record
+    cognito = CognitoAdmin()
+    try:
+        created = cognito.create_user(payload.email, payload.full_name)
+    except CognitoAdminError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    for group in payload.groups:
+        cognito.add_to_group(created["sub"], group)
+    repo = DynamoRepository()
+    repo.put_user_profile(created["sub"], payload.email, payload.groups, "ACTIVE", 1)
+    local_state.audit.append({"entity": "user", "entity_id": created["sub"], "action": "created", "actor": user.sub, "at": utc_now_iso()})
+    return {**created, "groups": payload.groups, "status": "ACTIVE", "authz_version": 1}
 
 
 @router.post("/users/{user_sub}/disable")
 def disable_user(user_sub: str, user=CurrentUser):
     require_admin(user)
-    target = local_state.users.get(user_sub)
+    if settings.demo_mode:
+        target = local_state.users.get(user_sub)
+        if not target:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        admins = [u for u in local_state.users.values() if "Administrator" in u["groups"] and u["status"] == "ACTIVE"]
+        if "Administrator" in target["groups"] and len(admins) <= 1:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Cannot disable last active administrator")
+        target["status"] = "DISABLED"
+        target["authz_version"] = int(target["authz_version"]) + 1
+        local_state.audit.append({"entity": "user", "entity_id": user_sub, "action": "disabled", "actor": user.sub, "at": utc_now_iso()})
+        return target
+    cognito = CognitoAdmin()
+    users = cognito.list_users()
+    target = next((u for u in users if u["sub"] == user_sub), None)
     if not target:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    admins = [u for u in local_state.users.values() if "Administrator" in u["groups"] and u["status"] == "ACTIVE"]
-    if "Administrator" in target["groups"] and len(admins) <= 1:
+    if "Administrator" in target["groups"] and _count_active_admins(users) <= 1:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Cannot disable last active administrator")
-    target["status"] = "DISABLED"
-    target["authz_version"] = int(target["authz_version"]) + 1
+    cognito.disable_user(user_sub)
+    repo = DynamoRepository()
+    repo.set_user_status(user_sub, "DISABLED")
+    new_version = repo.bump_authz_version(user_sub)
     local_state.audit.append({"entity": "user", "entity_id": user_sub, "action": "disabled", "actor": user.sub, "at": utc_now_iso()})
-    return target
+    return {**target, "status": "DISABLED", "authz_version": new_version}
+
+
+@router.post("/users/{user_sub}/enable")
+def enable_user(user_sub: str, user=CurrentUser):
+    require_admin(user)
+    if settings.demo_mode:
+        target = local_state.users.get(user_sub)
+        if not target:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        target["status"] = "ACTIVE"
+        local_state.audit.append({"entity": "user", "entity_id": user_sub, "action": "enabled", "actor": user.sub, "at": utc_now_iso()})
+        return target
+    cognito = CognitoAdmin()
+    cognito.enable_user(user_sub)
+    repo = DynamoRepository()
+    repo.set_user_status(user_sub, "ACTIVE")
+    local_state.audit.append({"entity": "user", "entity_id": user_sub, "action": "enabled", "actor": user.sub, "at": utc_now_iso()})
+    return {"sub": user_sub, "status": "ACTIVE"}
 
 
 @router.post("/users/{user_sub}/groups")
-def set_groups(user_sub: str, groups: list[str], user=CurrentUser):
+def set_groups(user_sub: str, payload: AdminUpdateGroupsRequest, user=CurrentUser):
     require_admin(user)
-    target = local_state.users.get(user_sub)
+    if settings.demo_mode:
+        target = local_state.users.get(user_sub)
+        if not target:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        admins = [u for u in local_state.users.values() if "Administrator" in u["groups"] and u["status"] == "ACTIVE"]
+        if "Administrator" in target["groups"] and "Administrator" not in payload.groups and len(admins) <= 1:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Cannot remove last active administrator")
+        target["groups"] = payload.groups
+        target["authz_version"] = int(target["authz_version"]) + 1
+        local_state.audit.append({"entity": "user", "entity_id": user_sub, "action": "groups_updated", "actor": user.sub, "at": utc_now_iso()})
+        return target
+    cognito = CognitoAdmin()
+    users = cognito.list_users()
+    target = next((u for u in users if u["sub"] == user_sub), None)
     if not target:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    admins = [u for u in local_state.users.values() if "Administrator" in u["groups"] and u["status"] == "ACTIVE"]
-    if "Administrator" in target["groups"] and "Administrator" not in groups and len(admins) <= 1:
+    if "Administrator" in target["groups"] and "Administrator" not in payload.groups and _count_active_admins(users) <= 1:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Cannot remove last active administrator")
-    target["groups"] = groups
-    target["authz_version"] = int(target["authz_version"]) + 1
+    cognito.set_groups(user_sub, payload.groups)
+    repo = DynamoRepository()
+    new_version = repo.bump_authz_version(user_sub)
     local_state.audit.append({"entity": "user", "entity_id": user_sub, "action": "groups_updated", "actor": user.sub, "at": utc_now_iso()})
-    return target
+    return {**target, "groups": payload.groups, "authz_version": new_version}
 

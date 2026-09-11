@@ -38,6 +38,24 @@ def create_candidate(payload: CandidateUpsertRequest, user=CurrentUser):
     return record
 
 
+@router.get("")
+def list_candidates(user=CurrentUser, q: str = "", candidate_type: str = ""):
+    require_capability(user, Capability.VIEW_INTERVIEWS)
+    if settings.demo_mode:
+        records = list(local_state.candidates.values())
+    else:
+        records = DynamoRepository().list_candidates()
+    needle = q.casefold().strip()
+    results = [
+        record
+        for record in records
+        if (not candidate_type or record.get("candidate_type") == candidate_type)
+        and (not needle or needle in f"{record.get('full_name', '')} {record.get('email', '')}".casefold())
+    ]
+    results.sort(key=lambda item: item.get("full_name", ""))
+    return {"candidates": results}
+
+
 @router.get("/{candidate_id}")
 def get_candidate(candidate_id: str, user=CurrentUser):
     require_capability(user, Capability.VIEW_INTERVIEWS)

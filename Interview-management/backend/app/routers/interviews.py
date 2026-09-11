@@ -1,18 +1,67 @@
 from __future__ import annotations
 
+from datetime import date
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 
 from app.auth import CurrentUser
 from app.config import settings
 from app.deps import assert_sensitive_user_authorization, can_access_scope, require_capability
 from app.models import CancelInterviewRequest, RescheduleInterviewRequest, ScheduleInterviewRequest, utc_now_iso
 from app.permissions import Capability
+from app.records import list_candidates_for_lookup, to_local_date, visible_records
 from app.repository import ConflictError, DynamoRepository, SchedulePayload, parse_local_to_utc
 from app.state import local_state
 
 router = APIRouter(prefix="/interviews", tags=["interviews"])
+
+
+@router.get("")
+def list_interviews(
+    user=CurrentUser,
+    status_filter: str = Query(default="", alias="status"),
+    requisition_id: str = Query(default=""),
+    q: str = Query(default=""),
+    mine_only: bool = Query(default=False),
+    start_date: str = Query(default=""),
+    end_date: str = Query(default=""),
+    timezone_name: str = Query(alias="timezone", default="Asia/Kolkata"),
+):
+    require_capability(user, Capability.VIEW_INTERVIEWS)
+    requisitions, interviews = visible_records(user)
+    requisitions_by_id = {item["requisition_id"]: item for item in requisitions}
+    candidates_by_id = {item["candidate_id"]: item for item in list_candidates_for_lookup()}
+    needle = q.casefold().strip()
+    range_start = date.fromisoformat(start_date) if start_date else None
+    range_end = date.fromisoformat(end_date) if end_date else None
+    rows = []
+    for interview in interviews:
+        if status_filter and interview.get("status") != status_filter:
+            continue
+        if requisition_id and interview.get("requisition_id") != requisition_id:
+            continue
+        if mine_only and user.sub not in interview.get("panel_subs", []):
+            continue
+        if (range_start or range_end) and interview.get("start_utc"):
+            interview_date = to_local_date(interview["start_utc"], timezone_name)
+            if range_start and interview_date < range_start:
+                continue
+            if range_end and interview_date > range_end:
+                continue
+        requisition = requisitions_by_id.get(interview.get("requisition_id", ""), {})
+        candidate = candidates_by_id.get(interview.get("candidate_id", ""), {})
+        row = {
+            **interview,
+            "requisition_title": requisition.get("title", ""),
+            "client_name": requisition.get("client_name", ""),
+            "candidate_name": candidate.get("full_name", ""),
+        }
+        if needle and needle not in f"{row['candidate_name']} {row['requisition_title']} {row.get('requisition_id', '')}".casefold():
+            continue
+        rows.append(row)
+    rows.sort(key=lambda item: item.get("start_utc", ""), reverse=True)
+    return {"interviews": rows}
 
 
 @router.post("", status_code=201)
