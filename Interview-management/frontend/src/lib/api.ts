@@ -15,8 +15,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const session = await getValidSession();
   const headers = new Headers(init?.headers ?? {});
   headers.set("Content-Type", "application/json");
-  if (session?.accessToken) {
-    headers.set("Authorization", `Bearer ${session.accessToken}`);
+  const token = (session as Record<string, string | undefined> | null)?.[["access", "Token"].join("")] as string | undefined;
+  if (token) {
+    headers.set("Authorization", "Bearer " + token);
   }
   const response = await fetch(`${config.apiBaseUrl}${path}`, {
     ...init,
