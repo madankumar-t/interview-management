@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { PageShell } from "../components/PageShell";
 import { api } from "../lib/api";
 import type { InterviewListItem } from "../types/domain";
+import type { Role } from "../types/auth";
 
 const STATUS_STYLES: Record<string, string> = {
   Scheduled: "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-200",
@@ -26,7 +27,7 @@ function describeError(reason: unknown): string {
   return "Unable to load interviews.";
 }
 
-export function InterviewsPage() {
+export function InterviewsPage({ groups }: { groups: Role[] }) {
   const [interviews, setInterviews] = useState<InterviewListItem[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -92,12 +93,14 @@ export function InterviewsPage() {
             My interviews only
           </label>
         </div>
-        <Link
-          to="/interviews/new"
-          className="whitespace-nowrap rounded bg-indigo-600 px-4 py-2 text-center text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        >
-          Schedule Interview
-        </Link>
+        {groups.some((role) => role === "Administrator" || role === "Manager") && (
+          <Link
+            to="/interviews/new"
+            className="whitespace-nowrap rounded bg-indigo-600 px-4 py-2 text-center text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            Schedule Interview
+          </Link>
+        )}
       </div>
 
       {error && (
@@ -173,5 +176,4 @@ export function InterviewsPage() {
     </PageShell>
   );
 }
-
 

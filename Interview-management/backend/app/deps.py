@@ -50,3 +50,6 @@ def require_admin(user: AuthContext) -> None:
     if Role.ADMINISTRATOR not in user.groups:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Administrator role required")
 
+
+def require_user_management(user: AuthContext) -> None:
+    require_capability(user, Capability.MANAGE_USERS)

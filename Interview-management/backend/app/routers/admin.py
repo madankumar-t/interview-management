@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException, status
 
 from app.auth import CurrentUser
 from app.config import settings
-from app.deps import require_admin
+from app.deps import require_user_management
 from app.identity import CognitoAdmin, CognitoAdminError
 from app.models import AdminCreateUserRequest, AdminUpdateGroupsRequest, utc_now_iso
 from app.repository import DynamoRepository
@@ -23,7 +23,7 @@ def _count_active_admins(users: list[dict]) -> int:
 
 @router.get("/users")
 def list_users(user=CurrentUser):
-    require_admin(user)
+    require_user_management(user)
     if settings.demo_mode:
         return list(local_state.users.values())
     cognito = CognitoAdmin()
@@ -38,7 +38,7 @@ def list_users(user=CurrentUser):
 
 @router.post("/users", status_code=201)
 def create_user(payload: AdminCreateUserRequest, user=CurrentUser):
-    require_admin(user)
+    require_user_management(user)
     if settings.demo_mode:
         sub = f"demo-user-{len(local_state.users) + 1}"
         record = {"sub": sub, "email": payload.email, "groups": payload.groups, "status": "ACTIVE", "authz_version": 1}
@@ -60,7 +60,7 @@ def create_user(payload: AdminCreateUserRequest, user=CurrentUser):
 
 @router.post("/users/{user_sub}/disable")
 def disable_user(user_sub: str, user=CurrentUser):
-    require_admin(user)
+    require_user_management(user)
     if settings.demo_mode:
         target = local_state.users.get(user_sub)
         if not target:
@@ -89,7 +89,7 @@ def disable_user(user_sub: str, user=CurrentUser):
 
 @router.post("/users/{user_sub}/enable")
 def enable_user(user_sub: str, user=CurrentUser):
-    require_admin(user)
+    require_user_management(user)
     if settings.demo_mode:
         target = local_state.users.get(user_sub)
         if not target:
@@ -111,7 +111,7 @@ def enable_user(user_sub: str, user=CurrentUser):
 
 @router.post("/users/{user_sub}/groups")
 def set_groups(user_sub: str, payload: AdminUpdateGroupsRequest, user=CurrentUser):
-    require_admin(user)
+    require_user_management(user)
     if settings.demo_mode:
         target = local_state.users.get(user_sub)
         if not target:
@@ -135,4 +135,3 @@ def set_groups(user_sub: str, payload: AdminUpdateGroupsRequest, user=CurrentUse
     new_version = repo.bump_authz_version(user_sub)
     local_state.audit.append({"entity": "user", "entity_id": user_sub, "action": "groups_updated", "actor": user.sub, "at": utc_now_iso()})
     return {**target, "groups": payload.groups, "authz_version": new_version}
-

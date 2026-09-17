@@ -4,7 +4,7 @@ import type { Role } from "../types/auth";
 import { api } from "../lib/api";
 import { detectTimezone } from "../lib/datetime";
 
-const MANAGE_ROLES: Role[] = ["Administrator", "Manager", "TA"];
+const MANAGE_ROLES: Role[] = ["Administrator", "Manager"];
 
 function describeError(reason: unknown): string {
   const message = reason instanceof Error ? reason.message : String(reason);

@@ -22,6 +22,7 @@ class Capability(StrEnum):
 ROLE_CAPABILITIES: dict[Role, set[Capability]] = {
     Role.ADMINISTRATOR: set(Capability),
     Role.MANAGER: {
+        Capability.MANAGE_USERS,
         Capability.VIEW_INTERVIEWS,
         Capability.MANAGE_CANDIDATES,
         Capability.MANAGE_SCHEDULING,
@@ -33,12 +34,7 @@ ROLE_CAPABILITIES: dict[Role, set[Capability]] = {
     },
     Role.TA: {
         Capability.VIEW_INTERVIEWS,
-        Capability.MANAGE_CANDIDATES,
-        Capability.MANAGE_SCHEDULING,
         Capability.SUBMIT_FEEDBACK,
-        Capability.VIEW_REPORTS,
-        Capability.VIEW_AUDIT,
-        Capability.MANAGE_AVAILABILITY,
     },
     Role.PANEL: {
         Capability.VIEW_INTERVIEWS,
@@ -72,4 +68,3 @@ def can_access_interview_record(user: AuthContext, scope: ScopeContext) -> bool:
         key = f"{scope.department}#{scope.project}"
         return key in scope.manager_scopes
     return False
-
