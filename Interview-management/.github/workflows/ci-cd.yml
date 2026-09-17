@@ -51,6 +51,11 @@ jobs:
           cp -r app package/
           cd package
           zip -r ../../artifacts/backend.zip .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backend-zip
+          path: artifacts/backend.zip
+          retention-days: 1
 
   terraform-plan:
     runs-on: ubuntu-latest
@@ -58,6 +63,10 @@ jobs:
     environment: dev
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: backend-zip
+          path: artifacts
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
@@ -74,6 +83,10 @@ jobs:
     environment: dev
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: backend-zip
+          path: artifacts
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
@@ -86,6 +99,21 @@ jobs:
           node-version: 20
       - run: npm ci
         working-directory: frontend
+      - run: |
+          API_URL=$(terraform -chdir=infra output -raw api_url)
+          CLOUDFRONT_DOMAIN=$(terraform -chdir=infra output -raw cloudfront_domain)
+          COGNITO_DOMAIN=$(terraform -chdir=infra output -raw cognito_domain)
+          COGNITO_CLIENT_ID=$(terraform -chdir=infra output -raw cognito_client_id)
+          COGNITO_API_SCOPES=$(terraform -chdir=infra output -raw cognito_api_scopes)
+          {
+            echo "VITE_API_BASE_URL=$API_URL"
+            echo "VITE_DEMO_MODE=false"
+            echo "VITE_COGNITO_DOMAIN=$COGNITO_DOMAIN"
+            echo "VITE_COGNITO_CLIENT_ID=$COGNITO_CLIENT_ID"
+            echo "VITE_COGNITO_API_SCOPES=$COGNITO_API_SCOPES"
+            echo "VITE_COGNITO_REDIRECT_URI=https://$CLOUDFRONT_DOMAIN/"
+            echo "VITE_COGNITO_LOGOUT_URI=https://$CLOUDFRONT_DOMAIN/"
+          } >> "$GITHUB_ENV"
       - run: npm run build
         working-directory: frontend
       - run: |
@@ -106,6 +134,10 @@ jobs:
     environment: ${{ github.event.inputs.target_env }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: backend-zip
+          path: artifacts
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ github.event.inputs.target_env == 'prod' && secrets.AWS_ROLE_ARN_PROD || secrets.AWS_ROLE_ARN_STAGING }}
@@ -113,3 +145,35 @@ jobs:
       - uses: hashicorp/setup-terraform@v3
       - run: terraform -chdir=infra init
       - run: terraform -chdir=infra apply -auto-approve -var-file=environments/${{ github.event.inputs.target_env }}.tfvars
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+        working-directory: frontend
+      - run: |
+          API_URL=$(terraform -chdir=infra output -raw api_url)
+          CLOUDFRONT_DOMAIN=$(terraform -chdir=infra output -raw cloudfront_domain)
+          COGNITO_DOMAIN=$(terraform -chdir=infra output -raw cognito_domain)
+          COGNITO_CLIENT_ID=$(terraform -chdir=infra output -raw cognito_client_id)
+          COGNITO_API_SCOPES=$(terraform -chdir=infra output -raw cognito_api_scopes)
+          {
+            echo "VITE_API_BASE_URL=$API_URL"
+            echo "VITE_DEMO_MODE=false"
+            echo "VITE_COGNITO_DOMAIN=$COGNITO_DOMAIN"
+            echo "VITE_COGNITO_CLIENT_ID=$COGNITO_CLIENT_ID"
+            echo "VITE_COGNITO_API_SCOPES=$COGNITO_API_SCOPES"
+            echo "VITE_COGNITO_REDIRECT_URI=https://$CLOUDFRONT_DOMAIN/"
+            echo "VITE_COGNITO_LOGOUT_URI=https://$CLOUDFRONT_DOMAIN/"
+          } >> "$GITHUB_ENV"
+      - run: npm run build
+        working-directory: frontend
+      - run: |
+          FRONTEND_BUCKET=$(terraform -chdir=infra output -raw frontend_bucket_name)
+          aws s3 sync frontend/dist "s3://$FRONTEND_BUCKET" --delete --cache-control "public,max-age=31536000,immutable" --exclude "index.html"
+          aws s3 cp frontend/dist/index.html "s3://$FRONTEND_BUCKET/index.html" --cache-control "public,max-age=60"
+      - run: |
+          DISTRIBUTION_ID=$(terraform -chdir=infra output -raw cloudfront_distribution_id)
+          aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION_ID" --paths "/index.html" "/assets/*"
+      - run: |
+          API_URL=$(terraform -chdir=infra output -raw api_url)
+          curl -f "$API_URL/health"
