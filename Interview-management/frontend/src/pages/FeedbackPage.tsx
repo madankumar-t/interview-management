@@ -190,7 +190,7 @@ export function FeedbackPage({ session }: { session: UserSession }) {
               onChange={(event) => setComments(event.target.value)}
             />
             <div className="flex gap-2">
-              <button type="button" className="rounded border border-slate-300 px-4 py-2 dark:border-slate-700" onClick={() => navigate("/my-schedule")}>
+              <button type="button" className="rounded border border-slate-300 px-4 py-2 dark:border-slate-700" onClick={() => navigate("/pending-feedback")}>
                 Back
               </button>
               <button type="submit" className="rounded bg-slate-700 px-4 py-2 text-white disabled:opacity-40 hover:bg-slate-800" disabled={saving || locked}>
@@ -207,7 +207,7 @@ export function FeedbackPage({ session }: { session: UserSession }) {
             </div>
           </form>
           <p className="text-xs text-slate-500">
-            Looking for another interview? <Link to="/my-schedule" className="text-indigo-600 underline">Back to My Schedule</Link>
+            Looking for another interview? <Link to="/pending-feedback" className="text-indigo-600 underline">Back to Pending Feedback</Link>
           </p>
         </div>
       )}

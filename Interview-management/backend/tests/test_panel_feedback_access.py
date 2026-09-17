@@ -14,6 +14,13 @@ def _override(sub: str):
     return current_user
 
 
+def _admin_override(sub: str):
+    async def current_user():
+        return AuthContext(sub=sub, email=f"{sub}@example.com", groups={Role.ADMINISTRATOR}, token_use="access")
+
+    return current_user
+
+
 def test_panel_list_contains_only_assigned_interviews(monkeypatch) -> None:
     monkeypatch.setattr(config.settings, "demo_mode", False)
     monkeypatch.setattr(
@@ -39,7 +46,12 @@ def test_panel_list_contains_only_assigned_interviews(monkeypatch) -> None:
 def test_unassigned_panel_cannot_save_or_submit_production_feedback(monkeypatch) -> None:
     class FakeRepository:
         def get_interview(self, _interview_id):
-            return {"panel_subs": ["panel-a"], "department": "Engineering", "project": "Core"}
+            return {
+                "panel_subs": ["panel-a"],
+                "department": "Engineering",
+                "project": "Core",
+                "status": "Scheduled",
+            }
 
     monkeypatch.setattr(config.settings, "demo_mode", False)
     monkeypatch.setattr("app.routers.feedback.DynamoRepository", FakeRepository)
@@ -62,7 +74,12 @@ def test_unassigned_panel_cannot_save_or_submit_production_feedback(monkeypatch)
 def test_assigned_panel_can_save_submit_and_only_read_own_draft(monkeypatch) -> None:
     class FakeRepository:
         def get_interview(self, _interview_id):
-            return {"panel_subs": ["panel-a"], "department": "Engineering", "project": "Core"}
+            return {
+                "panel_subs": ["panel-a"],
+                "department": "Engineering",
+                "project": "Core",
+                "status": "Completed",
+            }
 
         def put_feedback_draft(self, interview_id, author_sub, payload):
             return {**payload, "interview_id": interview_id, "author_sub": author_sub, "status": "Draft"}
@@ -98,4 +115,62 @@ def test_assigned_panel_can_save_submit_and_only_read_own_draft(monkeypatch) -> 
         ("panel-a", "Draft"),
         ("panel-b", "Submitted"),
     ]
+    app.dependency_overrides.clear()
+
+
+def test_feedback_is_rejected_for_cancelled_interview(monkeypatch) -> None:
+    class FakeRepository:
+        def get_interview(self, _interview_id):
+            return {
+                "panel_subs": ["panel-a"],
+                "department": "Engineering",
+                "project": "Core",
+                "status": "Cancelled",
+            }
+
+    monkeypatch.setattr(config.settings, "demo_mode", False)
+    monkeypatch.setattr("app.routers.feedback.DynamoRepository", FakeRepository)
+    app.dependency_overrides[get_current_user] = _override("panel-a")
+    client = TestClient(app)
+    payload = {
+        "interview_id": "i-1",
+        "competency_scores": {"Technical": 4},
+        "strengths": "Strong fundamentals",
+        "improvement_areas": "Communication",
+        "recommendation": "Hire",
+        "comments": "",
+    }
+
+    assert client.post("/feedback/draft", json=payload).status_code == 409
+    assert client.post("/feedback/submit", json={"interview_id": "i-1"}).status_code == 409
+    app.dependency_overrides.clear()
+
+
+def test_administrator_can_provide_feedback_without_panel_assignment(monkeypatch) -> None:
+    class FakeRepository:
+        def get_interview(self, _interview_id):
+            return {
+                "panel_subs": ["panel-a"],
+                "department": "Engineering",
+                "project": "Core",
+                "status": "Scheduled",
+            }
+
+        def put_feedback_draft(self, interview_id, author_sub, payload):
+            return {**payload, "interview_id": interview_id, "author_sub": author_sub, "status": "Draft"}
+
+    monkeypatch.setattr(config.settings, "demo_mode", False)
+    monkeypatch.setattr("app.routers.feedback.DynamoRepository", FakeRepository)
+    app.dependency_overrides[get_current_user] = _admin_override("admin-a")
+    client = TestClient(app)
+    payload = {
+        "interview_id": "i-1",
+        "competency_scores": {"Technical": 4},
+        "strengths": "Strong fundamentals",
+        "improvement_areas": "Communication",
+        "recommendation": "Hire",
+        "comments": "",
+    }
+
+    assert client.post("/feedback/draft", json=payload).status_code == 201
     app.dependency_overrides.clear()
