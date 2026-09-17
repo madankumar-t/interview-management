@@ -7,14 +7,14 @@ from app.models import AuthContext, Role
 from app.state import local_state
 
 
-async def _ta_user():
-    return AuthContext(sub="demo-ta-1", email="ta@example.com", groups={Role.TA}, token_use="access")
+async def _manager_user():
+    return AuthContext(sub="demo-manager-1", email="manager@example.com", groups={Role.MANAGER}, token_use="access")
 
 
 def test_panel_can_be_created_filtered_and_deactivated(monkeypatch) -> None:
     monkeypatch.setattr(config.settings, "demo_mode", True)
     monkeypatch.setattr(local_state, "users", {})
-    app.dependency_overrides[get_current_user] = _ta_user
+    app.dependency_overrides[get_current_user] = _manager_user
     client = TestClient(app)
 
     created = client.post(

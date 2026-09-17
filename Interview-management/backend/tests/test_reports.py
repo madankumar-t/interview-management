@@ -77,7 +77,7 @@ def test_daily_and_weekly_reports_by_requirement(monkeypatch) -> None:
         )
 
         app.dependency_overrides[get_current_user] = _override(
-            AuthContext(sub="demo-ta-1", groups={Role.TA}, token_use="access", authz_version=1)
+            AuthContext(sub="demo-manager-1", groups={Role.MANAGER}, token_use="access", authz_version=1)
         )
         client = TestClient(app)
 

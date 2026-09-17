@@ -2,7 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 import type { Role } from "../types/auth";
 
 const pages = [
-  { to: "/", label: "Dashboard", roles: ["Administrator", "Manager", "TA", "Panel"] as Role[] },
+  { to: "/", label: "Dashboard", roles: ["Administrator", "Manager"] as Role[] },
   { to: "/calendar", label: "Interview Calendar", roles: ["Administrator", "Manager", "TA", "Panel"] as Role[] },
   { to: "/interviews", label: "Interviews", roles: ["Administrator", "Manager", "TA", "Panel"] as Role[] },
   { to: "/candidates", label: "Candidate List", roles: ["Administrator", "Manager"] as Role[] },

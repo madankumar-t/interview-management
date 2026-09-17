@@ -16,7 +16,7 @@ def _override(user: AuthContext):
 def test_requisition_captures_intake_and_client_details(monkeypatch) -> None:
     monkeypatch.setattr(config.settings, "demo_mode", True)
     app.dependency_overrides[get_current_user] = _override(
-        AuthContext(sub="demo-ta-1", email="ta@example.com", groups={Role.TA}, token_use="access", authz_version=1)
+        AuthContext(sub="demo-manager-1", email="manager@example.com", groups={Role.MANAGER}, token_use="access", authz_version=1)
     )
     client = TestClient(app)
     payload = {
@@ -45,7 +45,7 @@ def test_requisition_captures_intake_and_client_details(monkeypatch) -> None:
 def test_requisition_rejects_invalid_position_counts(monkeypatch) -> None:
     monkeypatch.setattr(config.settings, "demo_mode", True)
     app.dependency_overrides[get_current_user] = _override(
-        AuthContext(sub="demo-ta-1", groups={Role.TA}, token_use="access", authz_version=1)
+        AuthContext(sub="demo-manager-1", groups={Role.MANAGER}, token_use="access", authz_version=1)
     )
     client = TestClient(app)
     payload = {
@@ -68,7 +68,7 @@ def test_requisition_rejects_invalid_position_counts(monkeypatch) -> None:
 def test_requisition_status_can_be_changed(monkeypatch) -> None:
     monkeypatch.setattr(config.settings, "demo_mode", True)
     app.dependency_overrides[get_current_user] = _override(
-        AuthContext(sub="demo-ta-1", email="ta@example.com", groups={Role.TA}, token_use="access", authz_version=1)
+        AuthContext(sub="demo-manager-1", email="manager@example.com", groups={Role.MANAGER}, token_use="access", authz_version=1)
     )
     client = TestClient(app)
     create_response = client.post(
@@ -95,8 +95,8 @@ def test_requisition_status_can_be_changed(monkeypatch) -> None:
     from app.state import local_state
 
     audit = local_state.audit[-1]
-    assert audit["actor_email"] == "ta@example.com"
-    assert audit["actor_roles"] == ["TA"]
+    assert audit["actor_email"] == "manager@example.com"
+    assert audit["actor_roles"] == ["Manager"]
     assert audit["changes"] == "status=On Hold"
     app.dependency_overrides.clear()
 
