@@ -8,7 +8,7 @@ afterEach(() => {
 });
 
 describe("Sidebar", () => {
-  it("gives TA a view-only slice: calendar, interviews, my schedule, and feedback", () => {
+  it("gives TA the interview coordination slice without administrative pages", () => {
     render(
       <MemoryRouter>
         <Sidebar groups={["TA"]} />

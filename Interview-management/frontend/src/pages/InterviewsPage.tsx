@@ -95,7 +95,7 @@ export function InterviewsPage({ groups }: { groups: Role[] }) {
             My interviews only
           </label>
         </div>
-        {groups.some((role) => role === "Administrator" || role === "Manager") && (
+        {groups.some((role) => role === "Administrator" || role === "Manager" || role === "TA") && (
           <Link
             to="/interviews/new"
             className="whitespace-nowrap rounded bg-indigo-600 px-4 py-2 text-center text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -191,4 +191,3 @@ export function InterviewsPage({ groups }: { groups: Role[] }) {
     </PageShell>
   );
 }
-

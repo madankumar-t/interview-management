@@ -14,6 +14,7 @@ import { CalendarPage } from "./pages/CalendarPage";
 import { MySchedulePage } from "./pages/MySchedulePage";
 import { FeedbackPage } from "./pages/FeedbackPage";
 import { PendingFeedbackPage } from "./pages/PendingFeedbackPage";
+import { MyAvailabilityPage } from "./pages/MyAvailabilityPage";
 import { UsersPage } from "./pages/UsersPage";
 import { AuditPage } from "./pages/AuditPage";
 import { SimplePage } from "./pages/SimplePage";
@@ -83,7 +84,7 @@ function App() {
           <Route path="/" element={<RoleRoute session={session} roles={["Administrator", "Manager"]}><DashboardPage /></RoleRoute>} />
           <Route path="/calendar" element={<RoleRoute session={session} roles={["Administrator", "Manager", "TA", "Panel"]}><CalendarPage groups={session.groups} /></RoleRoute>} />
           <Route path="/interviews" element={<RoleRoute session={session} roles={["Administrator", "Manager", "TA", "Panel"]}><InterviewsPage groups={session.groups} /></RoleRoute>} />
-          <Route path="/interviews/new" element={<RoleRoute session={session} roles={["Administrator", "Manager"]}><ScheduleInterviewPage /></RoleRoute>} />
+          <Route path="/interviews/new" element={<RoleRoute session={session} roles={["Administrator", "Manager", "TA"]}><ScheduleInterviewPage /></RoleRoute>} />
           <Route path="/interviews/:interviewId/feedback" element={<RoleRoute session={session} roles={["Administrator", "Manager", "TA", "Panel"]}><FeedbackPage session={session} /></RoleRoute>} />
           <Route path="/candidates" element={<RoleRoute session={session} roles={["Administrator", "Manager"]}><CandidateListPage /></RoleRoute>} />
           <Route path="/candidates/new" element={<RoleRoute session={session} roles={["Administrator", "Manager"]}><CandidatesPage /></RoleRoute>} />
@@ -92,7 +93,7 @@ function App() {
           <Route path="/panels" element={<RoleRoute session={session} roles={["Administrator", "Manager"]}><PanelsPage /></RoleRoute>} />
           <Route path="/panels/list" element={<RoleRoute session={session} roles={["Administrator", "Manager"]}><PanelListPage /></RoleRoute>} />
           <Route path="/my-schedule" element={<RoleRoute session={session} roles={["Administrator", "Manager", "TA", "Panel"]}><MySchedulePage groups={session.groups} /></RoleRoute>} />
-          <Route path="/my-availability" element={<RoleRoute session={session} roles={["Administrator", "Manager", "Panel"]}><SimplePage title="My Availability" /></RoleRoute>} />
+          <Route path="/my-availability" element={<RoleRoute session={session} roles={["Administrator", "Manager", "Panel"]}><MyAvailabilityPage /></RoleRoute>} />
           <Route path="/pending-feedback" element={<RoleRoute session={session} roles={["Administrator", "Manager", "TA", "Panel"]}><PendingFeedbackPage session={session} /></RoleRoute>} />
           <Route path="/reports" element={<RoleRoute session={session} roles={["Administrator", "Manager"]}><ReportsPage /></RoleRoute>} />
           <Route path="/users" element={<RoleRoute session={session} roles={["Administrator", "Manager"]}><UsersPage /></RoleRoute>} />

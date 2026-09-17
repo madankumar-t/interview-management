@@ -6,6 +6,7 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException, Query, status
 
 from app.auth import CurrentUser
+from app.availability_service import unavailable_panel_subs
 from app.config import settings
 from app.deps import assert_sensitive_user_authorization, can_access_scope, require_capability
 from app.models import CancelInterviewRequest, RescheduleInterviewRequest, ScheduleInterviewRequest, utc_now_iso
@@ -66,8 +67,16 @@ def list_interviews(
 
 @router.post("", status_code=201)
 def schedule_interview(payload: ScheduleInterviewRequest, user=CurrentUser):
-    require_capability(user, Capability.MANAGE_SCHEDULING)
+    require_capability(user, Capability.ASSIGN_INTERVIEWS)
     assert_sensitive_user_authorization(user)
+    start_utc = parse_local_to_utc(payload.start_local_iso, payload.timezone).isoformat()
+    end_utc = parse_local_to_utc(payload.end_local_iso, payload.timezone).isoformat()
+    unavailable = unavailable_panel_subs(payload.panel_subs, start_utc, end_utc)
+    if unavailable:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Panel members are unavailable for this time: {', '.join(unavailable)}",
+        )
     if settings.demo_mode:
         req = local_state.requisitions.get(payload.requisition_id)
         if not req:
@@ -93,8 +102,6 @@ def schedule_interview(payload: ScheduleInterviewRequest, user=CurrentUser):
         return interview.__dict__
     repo = DynamoRepository()
     department, project = repo.get_requisition_scope(payload.requisition_id)
-    start_utc = parse_local_to_utc(payload.start_local_iso, payload.timezone).isoformat()
-    end_utc = parse_local_to_utc(payload.end_local_iso, payload.timezone).isoformat()
     schedule_payload = SchedulePayload(
         interview_id=str(uuid4()),
         candidate_id=payload.candidate_id,

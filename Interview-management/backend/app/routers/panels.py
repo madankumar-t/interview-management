@@ -6,6 +6,7 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException, Query, status
 
 from app.auth import CurrentUser
+from app.availability_service import unavailable_panel_subs
 from app.config import settings
 from app.deps import require_capability
 from app.identity import CognitoAdmin
@@ -71,7 +72,7 @@ def list_panel_members(
     panel_type: str = "",
     include_inactive: bool = False,
 ):
-    require_capability(user, Capability.MANAGE_SCHEDULING)
+    require_capability(user, Capability.ASSIGN_INTERVIEWS)
     if settings.demo_mode:
         records = [
             {
@@ -126,7 +127,7 @@ def check_conflicts(
     start_utc: str = Query(...),
     end_utc: str = Query(...),
 ):
-    require_capability(user, Capability.MANAGE_SCHEDULING)
+    require_capability(user, Capability.ASSIGN_INTERVIEWS)
     subs = {value for value in panel_subs.split(",") if value}
     new_start = datetime.fromisoformat(start_utc)
     new_end = datetime.fromisoformat(end_utc)
@@ -149,4 +150,5 @@ def check_conflicts(
                     "end_utc": interview["end_utc"],
                 }
             )
-    return {"conflicts": conflicts}
+    unavailable = unavailable_panel_subs(subs, start_utc, end_utc)
+    return {"conflicts": conflicts, "unavailable_panel_subs": unavailable}

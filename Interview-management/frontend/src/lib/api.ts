@@ -2,9 +2,10 @@ import { config } from "./config";
 import { getValidSession, markSessionExpired } from "./auth";
 import type {
   AdminUser,
+  AvailabilitySlot,
   AuditRecord,
   CandidateSummary,
-  Conflict,
+  ConflictCheck,
   FeedbackRecord,
   InterviewListItem,
   PanelMember,
@@ -90,8 +91,14 @@ export const api = {
       start_utc: startUtc,
       end_utc: endUtc,
     });
-    return request<{ conflicts: Conflict[] }>(`/panels/conflicts?${search.toString()}`);
+    return request<ConflictCheck>(`/panels/conflicts?${search.toString()}`);
   },
+  getMyAvailability: () => request<{ sub: string; availability: AvailabilitySlot[] }>("/availability/me"),
+  updateMyAvailability: (slots: AvailabilitySlot[]) =>
+    request<{ sub: string; availability: AvailabilitySlot[] }>("/availability/me", {
+      method: "PUT",
+      body: JSON.stringify({ slots }),
+    }),
   scheduleInterview: (body: unknown) => request("/interviews", { method: "POST", body: JSON.stringify(body) }),
   listInterviews: (params?: {
     status?: string;

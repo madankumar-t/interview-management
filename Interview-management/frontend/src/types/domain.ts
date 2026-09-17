@@ -123,6 +123,17 @@ export interface Conflict {
   end_utc: string;
 }
 
+export interface AvailabilitySlot {
+  start_utc: string;
+  end_utc: string;
+  timezone: string;
+}
+
+export interface ConflictCheck {
+  conflicts: Conflict[];
+  unavailable_panel_subs: string[];
+}
+
 export interface FeedbackRecord {
   interview_id: string;
   competency_scores: Record<string, number>;
@@ -153,4 +164,3 @@ export interface AuditRecord {
   actor_roles: string[];
   changes: string;
 }
-

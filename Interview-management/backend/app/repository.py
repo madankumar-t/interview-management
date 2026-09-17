@@ -173,6 +173,52 @@ class DynamoRepository:
             "authz_version": int(item.get("authz_version", {}).get("N", "0")),
         }
 
+    def get_availability(self, sub: str) -> list[dict[str, str]]:
+        response = self.client.get_item(
+            TableName=self.table_name,
+            Key={"pk": {"S": f"USER#{sub}"}, "sk": {"S": "AVAILABILITY"}},
+            ConsistentRead=True,
+        )
+        item = response.get("Item")
+        if not item:
+            return []
+        return json.loads(item.get("slots", {}).get("S", "[]"))
+
+    def put_availability(
+        self,
+        sub: str,
+        slots: list[dict[str, str]],
+        actor_email: str,
+        actor_roles: list[str],
+    ) -> None:
+        now = utc_now_iso()
+        tx_items: list[dict[str, Any]] = [
+            {
+                "Put": {
+                    "TableName": self.table_name,
+                    "Item": {
+                        "pk": {"S": f"USER#{sub}"},
+                        "sk": {"S": "AVAILABILITY"},
+                        "entity_type": {"S": "availability"},
+                        "sub": {"S": sub},
+                        "slots": {"S": json.dumps(slots, separators=(",", ":"))},
+                        "updated_at": {"S": now},
+                    },
+                }
+            }
+        ]
+        self._put_audit(
+            tx_items,
+            "availability",
+            sub,
+            "updated",
+            sub,
+            f"slots={len(slots)}",
+            actor_email,
+            actor_roles,
+        )
+        self.client.transact_write_items(TransactItems=tx_items)
+
     def put_user_profile(self, sub: str, email: str, groups: list[str], status_value: str, authz_version: int) -> None:
         self.client.put_item(
             TableName=self.table_name,
@@ -476,6 +522,8 @@ class DynamoRepository:
             exclusive_start_key = response.get("LastEvaluatedKey")
             if not exclusive_start_key:
                 break
+        for panel in panels:
+            panel["availability_slots"] = len(self.get_availability(panel["sub"]))
         return panels
 
     def update_panel_status(

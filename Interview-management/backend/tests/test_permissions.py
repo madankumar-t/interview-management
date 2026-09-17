@@ -1,5 +1,5 @@
 from app.models import AuthContext, Role
-from app.permissions import ScopeContext, can_access_interview_record
+from app.permissions import Capability, ScopeContext, can_access_interview_record, has_capability
 
 
 def test_panel_cannot_access_other_panel_interview() -> None:
@@ -32,4 +32,5 @@ def test_ta_can_view_all() -> None:
         user,
         ScopeContext(department="Any", project="Any", panel_subs={"x"}, manager_scopes=set(), actor_sub="ta-1"),
     )
-
+    assert has_capability(user, Capability.ASSIGN_INTERVIEWS)
+    assert not has_capability(user, Capability.MANAGE_SCHEDULING)

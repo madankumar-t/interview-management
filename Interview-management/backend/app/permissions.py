@@ -10,6 +10,7 @@ class Capability(StrEnum):
     MANAGE_USERS = "manage_users"
     MANAGE_SETTINGS = "manage_settings"
     VIEW_INTERVIEWS = "view_interviews"
+    ASSIGN_INTERVIEWS = "assign_interviews"
     MANAGE_CANDIDATES = "manage_candidates"
     MANAGE_SCHEDULING = "manage_scheduling"
     SUBMIT_FEEDBACK = "submit_feedback"
@@ -24,6 +25,7 @@ ROLE_CAPABILITIES: dict[Role, set[Capability]] = {
     Role.MANAGER: {
         Capability.MANAGE_USERS,
         Capability.VIEW_INTERVIEWS,
+        Capability.ASSIGN_INTERVIEWS,
         Capability.MANAGE_CANDIDATES,
         Capability.MANAGE_SCHEDULING,
         Capability.SUBMIT_FEEDBACK,
@@ -34,6 +36,7 @@ ROLE_CAPABILITIES: dict[Role, set[Capability]] = {
     },
     Role.TA: {
         Capability.VIEW_INTERVIEWS,
+        Capability.ASSIGN_INTERVIEWS,
         Capability.SUBMIT_FEEDBACK,
     },
     Role.PANEL: {

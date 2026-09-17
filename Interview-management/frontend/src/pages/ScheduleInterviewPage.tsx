@@ -16,6 +16,9 @@ const INTERVIEW_ROUNDS = ["Round 1", "Round 2", "Round 3", "Final"];
 function describeError(reason: unknown): string {
   const message = reason instanceof Error ? reason.message : String(reason);
   if (message.startsWith("409")) {
+    if (/unavailable/i.test(message)) {
+      return "One or more panel members are unavailable for this time. Review their availability and choose another slot.";
+    }
     return "This slot conflicts with an existing reservation. Please choose a different time.";
   }
   if (message.startsWith("401")) {
@@ -57,6 +60,7 @@ export function ScheduleInterviewPage() {
 
   // Step 4
   const [conflicts, setConflicts] = useState<Conflict[] | null>(null);
+  const [unavailablePanelSubs, setUnavailablePanelSubs] = useState<string[]>([]);
   const [checkingConflicts, setCheckingConflicts] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -81,6 +85,7 @@ export function ScheduleInterviewPage() {
   async function goToReview() {
     setStep(3);
     setConflicts(null);
+    setUnavailablePanelSubs([]);
     if (!date || duration <= 0 || panelMembers.length === 0) {
       return;
     }
@@ -90,8 +95,10 @@ export function ScheduleInterviewPage() {
       const endUtc = localToUtcIso(date, endTime, tz);
       const result = await api.checkConflicts(panelMembers.map((p) => p.sub), startUtc, endUtc);
       setConflicts(result.conflicts);
+      setUnavailablePanelSubs(result.unavailable_panel_subs);
     } catch {
       setConflicts(null);
+      setUnavailablePanelSubs([]);
     } finally {
       setCheckingConflicts(false);
     }
@@ -276,7 +283,8 @@ export function ScheduleInterviewPage() {
                   <div>
                     <div className="font-medium">{p.full_name || p.email}</div>
                     <div className="text-xs text-slate-500">
-                      {p.panel_type} · {p.experience_years} years · {p.skills.length > 0 ? p.skills.join(", ") : "No technologies listed"}
+                      {p.panel_type} · {p.experience_years} years · {p.availability_slots} availability window
+                      {p.availability_slots === 1 ? "" : "s"} · {p.skills.length > 0 ? p.skills.join(", ") : "No technologies listed"}
                     </div>
                   </div>
                 )}
@@ -429,8 +437,18 @@ export function ScheduleInterviewPage() {
               {!checkingConflicts && conflicts === null && (
                 <p className="text-sm text-slate-500">Availability could not be verified. You may still proceed.</p>
               )}
-              {!checkingConflicts && conflicts !== null && conflicts.length === 0 && (
+              {!checkingConflicts && conflicts !== null && conflicts.length === 0 && unavailablePanelSubs.length === 0 && (
                 <p className="text-sm text-emerald-700 dark:text-emerald-300">No conflicts detected for the selected panel members.</p>
+              )}
+              {!checkingConflicts && unavailablePanelSubs.length > 0 && (
+                <div className="mt-2 rounded bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                  <p className="font-medium">Unavailable for the selected time:</p>
+                  <ul className="list-disc pl-5">
+                    {unavailablePanelSubs.map((sub) => (
+                      <li key={sub}>{panelMembers.find((panel) => panel.sub === sub)?.full_name || sub}</li>
+                    ))}
+                  </ul>
+                </div>
               )}
               {!checkingConflicts && conflicts !== null && conflicts.length > 0 && (
                 <ul className="space-y-1 text-sm text-red-700">
@@ -469,7 +487,12 @@ export function ScheduleInterviewPage() {
             <button
               type="submit"
               className="rounded bg-indigo-600 px-4 py-2 text-white disabled:opacity-40 hover:bg-indigo-700"
-              disabled={submitting}
+              disabled={
+                submitting
+                || checkingConflicts
+                || unavailablePanelSubs.length > 0
+                || (conflicts !== null && conflicts.length > 0)
+              }
             >
               {submitting ? "Scheduling…" : "Schedule Interview"}
             </button>

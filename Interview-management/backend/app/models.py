@@ -121,6 +121,32 @@ class PanelStatusUpdateRequest(BaseModel):
     status: PanelStatus
 
 
+class AvailabilitySlot(BaseModel):
+    start_utc: datetime
+    end_utc: datetime
+    timezone: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_window(self) -> "AvailabilitySlot":
+        if self.start_utc.tzinfo is None or self.end_utc.tzinfo is None:
+            raise ValueError("Availability times must include a UTC offset")
+        if self.end_utc <= self.start_utc:
+            raise ValueError("Availability end time must be after start time")
+        return self
+
+
+class AvailabilityUpdateRequest(BaseModel):
+    slots: list[AvailabilitySlot] = Field(default_factory=list, max_length=100)
+
+    @model_validator(mode="after")
+    def validate_overlaps(self) -> "AvailabilityUpdateRequest":
+        ordered = sorted(self.slots, key=lambda slot: slot.start_utc)
+        for previous, current in zip(ordered, ordered[1:]):
+            if current.start_utc < previous.end_utc:
+                raise ValueError("Availability slots must not overlap")
+        return self
+
+
 class RequisitionUpsertRequest(BaseModel):
     requisition_id: str
     title: str
