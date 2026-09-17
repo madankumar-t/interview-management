@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Outlet } from "react-router-dom";
 import type { UserSession } from "../types/auth";
 import { Sidebar } from "./Sidebar";
-import { logout } from "../lib/auth";
+import { logout, resetMyPassword } from "../lib/auth";
 
 export function AppLayout({ session, onLogout }: { session: UserSession; onLogout: () => void }) {
   const [isDark, setIsDark] = useState(() => localStorage.getItem("ims-theme") === "dark");
@@ -25,6 +25,13 @@ export function AppLayout({ session, onLogout }: { session: UserSession; onLogou
             <p className="text-sm">Roles: {session.groups.join(", ")}</p>
           </div>
           <div className="flex gap-2">
+            <button
+              type="button"
+              className="rounded border border-sky-700 px-3 py-2 text-sky-800 dark:text-sky-200"
+              onClick={resetMyPassword}
+            >
+              Reset My Password
+            </button>
             <button
               className="rounded bg-sky-700 px-3 py-2 text-white"
               onClick={() => {

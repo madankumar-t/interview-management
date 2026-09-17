@@ -109,6 +109,47 @@ def enable_user(user_sub: str, user=CurrentUser):
     return {"sub": user_sub, "status": "ACTIVE"}
 
 
+@router.post("/users/{user_sub}/reset-password")
+def reset_user_password(user_sub: str, user=CurrentUser):
+    require_user_management(user)
+    if settings.demo_mode:
+        target = local_state.users.get(user_sub)
+        if not target:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        if target.get("status") != "ACTIVE":
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Cannot reset password for a disabled user")
+        local_state.audit.append(
+            {
+                "entity": "user",
+                "entity_id": user_sub,
+                "action": "password_reset_requested",
+                "actor": user.sub,
+                "at": utc_now_iso(),
+            }
+        )
+        return {"sub": user_sub, "message": "Password reset requested"}
+    cognito = CognitoAdmin()
+    target = next((record for record in cognito.list_users() if record["sub"] == user_sub), None)
+    if not target:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if not target.get("enabled", True):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Cannot reset password for a disabled user")
+    try:
+        cognito.reset_user_password(target["username"])
+    except CognitoAdminError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    local_state.audit.append(
+        {
+            "entity": "user",
+            "entity_id": user_sub,
+            "action": "password_reset_requested",
+            "actor": user.sub,
+            "at": utc_now_iso(),
+        }
+    )
+    return {"sub": user_sub, "message": "Password reset requested"}
+
+
 @router.post("/users/{user_sub}/groups")
 def set_groups(user_sub: str, payload: AdminUpdateGroupsRequest, user=CurrentUser):
     require_user_management(user)

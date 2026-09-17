@@ -137,6 +137,8 @@ export const api = {
     request<AdminUser>(`/admin/users/${sub}/groups`, { method: "POST", body: JSON.stringify({ groups }) }),
   disableAdminUser: (sub: string) => request<AdminUser>(`/admin/users/${sub}/disable`, { method: "POST" }),
   enableAdminUser: (sub: string) => request<AdminUser>(`/admin/users/${sub}/enable`, { method: "POST" }),
+  resetAdminUserPassword: (sub: string) =>
+    request<{ sub: string; message: string }>(`/admin/users/${sub}/reset-password`, { method: "POST" }),
   listAudit: () => request<AuditRecord[]>("/audit"),
   getDailyInterviewsReport: (date: string, timezone = "Asia/Kolkata") =>
     request(`/reports/daily-interviews?date=${encodeURIComponent(date)}&timezone=${encodeURIComponent(timezone)}`),

@@ -65,6 +65,12 @@ class CognitoAdmin:
     def enable_user(self, username: str) -> None:
         self.client.admin_enable_user(UserPoolId=self.user_pool_id, Username=username)
 
+    def reset_user_password(self, username: str) -> None:
+        try:
+            self.client.admin_reset_user_password(UserPoolId=self.user_pool_id, Username=username)
+        except ClientError as exc:
+            raise CognitoAdminError(exc.response["Error"].get("Message", str(exc))) from exc
+
     def list_users(self) -> list[dict[str, Any]]:
         users: list[dict[str, Any]] = []
         pagination_token: str | None = None

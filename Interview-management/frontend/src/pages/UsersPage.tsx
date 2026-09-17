@@ -8,9 +8,15 @@ const ALL_ROLES = ["Administrator", "Manager", "TA", "Panel"];
 function describeError(reason: unknown): string {
   const message = reason instanceof Error ? reason.message : String(reason);
   if (message.startsWith("409")) {
+    if (/disabled user/i.test(message)) {
+      return "Enable this user before requesting a password reset.";
+    }
     return "Cannot complete this action: at least one active administrator is required.";
   }
   if (message.startsWith("400")) {
+    if (/password/i.test(message)) {
+      return "Cognito could not start the password reset. Verify the user account and try again.";
+    }
     return "Unable to create user. Check the email address and try again.";
   }
   if (message.startsWith("401")) {
@@ -49,6 +55,7 @@ function UserRow({ user, onChanged }: { user: AdminUser; onChanged: () => void }
   const [groups, setGroups] = useState<string[]>(user.groups);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
 
   async function saveGroups() {
     setSaving(true);
@@ -74,6 +81,20 @@ function UserRow({ user, onChanged }: { user: AdminUser; onChanged: () => void }
         await api.enableAdminUser(user.sub);
       }
       onChanged();
+    } catch (reason) {
+      setError(describeError(reason));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function resetPassword() {
+    setSaving(true);
+    setError("");
+    setMessage("");
+    try {
+      await api.resetAdminUserPassword(user.sub);
+      setMessage(`Password reset instructions sent to ${user.email}.`);
     } catch (reason) {
       setError(describeError(reason));
     } finally {
@@ -113,6 +134,7 @@ function UserRow({ user, onChanged }: { user: AdminUser; onChanged: () => void }
       </td>
       <td className="p-3">
         {error && <p className="mb-1 text-xs text-red-700">{error}</p>}
+        {message && !error && <p className="mb-1 text-xs text-emerald-700">{message}</p>}
         <div className="flex flex-wrap gap-2">
           {editing ? (
             <>
@@ -140,6 +162,14 @@ function UserRow({ user, onChanged }: { user: AdminUser; onChanged: () => void }
               Edit Roles
             </button>
           )}
+          <button
+            type="button"
+            className="rounded border border-amber-500 px-3 py-1 text-sm text-amber-800 disabled:opacity-40 dark:text-amber-300"
+            disabled={saving || user.status !== "ACTIVE"}
+            onClick={resetPassword}
+          >
+            Reset Password
+          </button>
           <button
             type="button"
             className={`rounded px-3 py-1 text-sm text-white disabled:opacity-40 ${

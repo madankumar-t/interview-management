@@ -178,3 +178,21 @@ export function logout(): void {
     window.location.assign(logoutUrl.toString());
   }
 }
+
+export function passwordResetUrl(): string {
+  const resetUrl = new URL(`https://${config.cognitoDomain}/forgotPassword`);
+  resetUrl.searchParams.set("client_id", config.cognitoClientId);
+  resetUrl.searchParams.set("response_type", "code");
+  const extraScopes = config.cognitoApiScopes ? ` ${config.cognitoApiScopes}` : "";
+  resetUrl.searchParams.set("scope", `openid email profile${extraScopes}`.trim());
+  resetUrl.searchParams.set("redirect_uri", config.cognitoRedirectUri);
+  return resetUrl.toString();
+}
+
+export function resetMyPassword(): void {
+  if (config.demoMode) {
+    return;
+  }
+  clearSession();
+  window.location.assign(passwordResetUrl());
+}
