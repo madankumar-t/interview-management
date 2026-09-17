@@ -735,9 +735,9 @@ class DynamoRepository:
                 "Update": {
                     "TableName": self.table_name,
                     "Key": {"pk": {"S": f"INTERVIEW#{interview_id}"}, "sk": {"S": "PROFILE"}},
-                    "UpdateExpression": "SET start_utc = :start_utc, end_utc = :end_utc, timezone = :tz, #v = #v + :one",
+                    "UpdateExpression": "SET start_utc = :start_utc, end_utc = :end_utc, #tz = :tz, #v = #v + :one",
                     "ConditionExpression": "#v = :expected_version",
-                    "ExpressionAttributeNames": {"#v": "version"},
+                    "ExpressionAttributeNames": {"#v": "version", "#tz": "timezone"},
                     "ExpressionAttributeValues": {
                         ":start_utc": {"S": start_utc},
                         ":end_utc": {"S": end_utc},
