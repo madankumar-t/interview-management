@@ -134,6 +134,34 @@ export interface ConflictCheck {
   unavailable_panel_subs: string[];
 }
 
+export interface PanelReportRow {
+  panel_id: string;
+  sub: string;
+  full_name: string;
+  email: string;
+  panel_type: "Internal" | "External";
+  status: string;
+  availability_slots: number;
+  interviews_total: number;
+  scheduled: number;
+  in_progress: number;
+  completed: number;
+  cancelled: number;
+  no_show: number;
+  pending_feedback: number;
+}
+
+export interface PanelReport {
+  generated_at: string;
+  summary: Record<"Internal" | "External", {
+    panels: number;
+    interviews: number;
+    completed: number;
+    pending_feedback: number;
+  }>;
+  panels: PanelReportRow[];
+}
+
 export interface FeedbackRecord {
   interview_id: string;
   competency_scores: Record<string, number>;

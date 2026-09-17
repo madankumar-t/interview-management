@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { PageShell } from "../components/PageShell";
 import { RequirementReport } from "../components/RequirementReport";
+import { PanelReport } from "../components/PanelReport";
 import { api } from "../lib/api";
 
 interface DailyReport {
@@ -65,6 +66,7 @@ export function ReportsPage() {
         </div>
         <RequirementReport />
       </section>
+      <PanelReport />
       <section className="space-y-4 border-t border-slate-200 pt-6 dark:border-slate-800">
         <h3 className="text-lg font-semibold text-sky-800 dark:text-sky-300">Date-based Interview Reports</h3>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">

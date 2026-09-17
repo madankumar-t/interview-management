@@ -147,3 +147,90 @@ def test_production_overview_uses_dynamodb_records(monkeypatch) -> None:
         assert body["requirements"][0]["interviews_total"] == 0
     finally:
         app.dependency_overrides.clear()
+
+
+def test_panel_report_splits_internal_and_external_panels(monkeypatch) -> None:
+    monkeypatch.setattr(config.settings, "demo_mode", True)
+    monkeypatch.setattr(
+        "app.routers.reports.visible_records",
+        lambda _user: (
+            [],
+            [
+                {
+                    "interview_id": "i-1",
+                    "panel_subs": ["panel-internal"],
+                    "status": "Completed",
+                    "feedback_status": "Submitted",
+                },
+                {
+                    "interview_id": "i-2",
+                    "panel_subs": ["panel-external"],
+                    "status": "Scheduled",
+                    "feedback_status": "Not Started",
+                },
+                {
+                    "interview_id": "i-3",
+                    "panel_subs": ["panel-internal", "panel-external"],
+                    "status": "Cancelled",
+                    "feedback_status": "Not Started",
+                },
+            ],
+        ),
+    )
+    monkeypatch.setattr(
+        "app.routers.reports._panel_records",
+        lambda: [
+            {
+                "panel_id": "p-1",
+                "sub": "panel-internal",
+                "full_name": "Internal Interviewer",
+                "email": "internal@example.com",
+                "panel_type": "Internal",
+                "status": "Active",
+                "availability_slots": 2,
+            },
+            {
+                "panel_id": "p-2",
+                "sub": "panel-external",
+                "full_name": "External Interviewer",
+                "email": "external@example.com",
+                "panel_type": "External",
+                "status": "Active",
+                "availability_slots": 1,
+            },
+        ],
+    )
+    monkeypatch.setattr(
+        "app.routers.reports._submitted_feedback_authors",
+        lambda _interviews: {"i-1": {"panel-internal"}},
+    )
+    app.dependency_overrides[get_current_user] = _override(
+        AuthContext(sub="admin-1", groups={Role.ADMINISTRATOR}, token_use="access", authz_version=1)
+    )
+    try:
+        client = TestClient(app)
+        response = client.get("/reports/panels")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["summary"]["Internal"] == {
+            "panels": 1,
+            "interviews": 2,
+            "completed": 1,
+            "pending_feedback": 0,
+        }
+        assert body["summary"]["External"] == {
+            "panels": 1,
+            "interviews": 2,
+            "completed": 0,
+            "pending_feedback": 1,
+        }
+        external = next(row for row in body["panels"] if row["panel_type"] == "External")
+        assert external["scheduled"] == 1
+        assert external["cancelled"] == 1
+        assert external["availability_slots"] == 1
+
+        filtered = client.get("/reports/panels", params={"panel_type": "External"})
+        assert filtered.status_code == 200
+        assert [row["panel_type"] for row in filtered.json()["panels"]] == ["External"]
+    finally:
+        app.dependency_overrides.clear()

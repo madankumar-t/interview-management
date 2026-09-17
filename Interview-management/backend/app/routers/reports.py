@@ -6,9 +6,12 @@ from fastapi import APIRouter, HTTPException, Query, status
 
 from app.auth import CurrentUser
 from app.deps import require_capability
+from app.config import settings
 from app.models import Role
 from app.permissions import Capability
 from app.records import CLOSED_REQUIREMENT_STATUSES, visible_records
+from app.repository import DynamoRepository
+from app.state import local_state
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -82,6 +85,42 @@ def _requirement_rows(requisitions: list[dict], interviews: list[dict]) -> list[
     return sorted(rows, key=lambda item: item["requisition_id"])
 
 
+def _panel_records() -> list[dict]:
+    if not settings.demo_mode:
+        return DynamoRepository().list_panels()
+    return [
+        {
+            "panel_id": profile.get("panel_id", profile["sub"]),
+            "sub": profile["sub"],
+            "full_name": profile.get("full_name", ""),
+            "email": profile.get("email", ""),
+            "panel_type": profile.get("panel_type", "Internal"),
+            "status": profile.get("status", "Active"),
+            "availability_slots": len(profile.get("availability", [])),
+        }
+        for profile in local_state.users.values()
+        if "Panel" in profile.get("groups", [])
+    ]
+
+
+def _submitted_feedback_authors(interviews: list[dict]) -> dict[str, set[str]]:
+    if settings.demo_mode:
+        result: dict[str, set[str]] = defaultdict(set)
+        for feedback in local_state.feedback.values():
+            if feedback.get("status") == "Submitted":
+                result[feedback["interview_id"]].add(feedback["author_sub"])
+        return result
+    repo = DynamoRepository()
+    return {
+        interview["interview_id"]: {
+            record["author_sub"]
+            for record in repo.list_feedback(interview["interview_id"])
+            if record.get("status") == "Submitted"
+        }
+        for interview in interviews
+    }
+
+
 @router.get("/overview")
 def overview(
     user=CurrentUser,
@@ -137,6 +176,55 @@ def workload(user=CurrentUser):
     _, interviews = visible_records(user)
     own = [item for item in interviews if user.sub in item["panel_subs"]]
     return {"total_interviews": len(interviews), "my_interviews": len(own)}
+
+
+@router.get("/panels")
+def panel_report(user=CurrentUser, panel_type: str = Query(default="")):
+    require_capability(user, Capability.VIEW_REPORTS)
+    _, interviews = visible_records(user)
+    assigned_subs = {sub for interview in interviews for sub in interview.get("panel_subs", [])}
+    panels = _panel_records()
+    if Role.MANAGER in user.groups:
+        panels = [panel for panel in panels if panel["sub"] in assigned_subs]
+    if panel_type:
+        panels = [panel for panel in panels if panel.get("panel_type", "").casefold() == panel_type.casefold()]
+
+    submitted_authors = _submitted_feedback_authors(interviews)
+    rows = []
+    for panel in panels:
+        assigned = [interview for interview in interviews if panel["sub"] in interview.get("panel_subs", [])]
+        rows.append(
+            {
+                **panel,
+                "interviews_total": len(assigned),
+                "scheduled": sum(interview.get("status") == "Scheduled" for interview in assigned),
+                "in_progress": sum(interview.get("status") == "In Progress" for interview in assigned),
+                "completed": sum(interview.get("status") == "Completed" for interview in assigned),
+                "cancelled": sum(interview.get("status") == "Cancelled" for interview in assigned),
+                "no_show": sum(interview.get("status") == "No Show" for interview in assigned),
+                "pending_feedback": sum(
+                    interview.get("status") in {"Scheduled", "Completed"}
+                    and panel["sub"] not in submitted_authors.get(interview["interview_id"], set())
+                    for interview in assigned
+                ),
+            }
+        )
+    rows.sort(key=lambda item: (item.get("full_name") or item.get("email") or item["sub"]).casefold())
+
+    types = ("Internal", "External")
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "summary": {
+            panel_type_name: {
+                "panels": sum(row.get("panel_type") == panel_type_name for row in rows),
+                "interviews": sum(row["interviews_total"] for row in rows if row.get("panel_type") == panel_type_name),
+                "completed": sum(row["completed"] for row in rows if row.get("panel_type") == panel_type_name),
+                "pending_feedback": sum(row["pending_feedback"] for row in rows if row.get("panel_type") == panel_type_name),
+            }
+            for panel_type_name in types
+        },
+        "panels": rows,
+    }
 
 
 @router.get("/daily-interviews")
