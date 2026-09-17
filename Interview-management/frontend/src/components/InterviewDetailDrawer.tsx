@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { InterviewListItem } from "../types/domain";
 import type { Role } from "../types/auth";
 import { api } from "../lib/api";
-import { detectTimezone } from "../lib/datetime";
+import { detectTimezone, utcToLocalDate, utcToLocalTime } from "../lib/datetime";
 
 const MANAGE_ROLES: Role[] = ["Administrator", "Manager"];
 
@@ -16,6 +16,9 @@ function describeError(reason: unknown): string {
   }
   if (message.startsWith("403")) {
     return "You are not authorized to make this change.";
+  }
+  if (message.startsWith("400") || message.startsWith("422")) {
+    return "The interview end time must be after the start time. Please check the date and times.";
   }
   if (/failed to fetch/i.test(message) || /networkerror/i.test(message)) {
     return "Unable to reach the server. Check your connection and try again.";
@@ -38,15 +41,20 @@ export function InterviewDetailDrawer({
   const isActive = interview.status === "Scheduled" || interview.status === "In Progress";
 
   const [mode, setMode] = useState<"view" | "reschedule" | "cancel">("view");
-  const [date, setDate] = useState(interview.start_utc.slice(0, 10));
-  const [startTime, setStartTime] = useState(new Date(interview.start_utc).toISOString().slice(11, 16));
-  const [endTime, setEndTime] = useState(new Date(interview.end_utc).toISOString().slice(11, 16));
-  const [tz, setTz] = useState(interview.timezone || detectTimezone());
+  const initialTz = interview.timezone || detectTimezone();
+  const [date, setDate] = useState(utcToLocalDate(interview.start_utc, initialTz));
+  const [startTime, setStartTime] = useState(utcToLocalTime(interview.start_utc, initialTz));
+  const [endTime, setEndTime] = useState(utcToLocalTime(interview.end_utc, initialTz));
+  const [tz, setTz] = useState(initialTz);
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
   async function submitReschedule() {
+    if (`${date}T${endTime}` <= `${date}T${startTime}`) {
+      setError("End time must be after start time.");
+      return;
+    }
     setSubmitting(true);
     setError("");
     try {

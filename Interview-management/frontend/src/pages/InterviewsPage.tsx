@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { PageShell } from "../components/PageShell";
+import { InterviewDetailDrawer } from "../components/InterviewDetailDrawer";
 import { api } from "../lib/api";
 import type { InterviewListItem } from "../types/domain";
 import type { Role } from "../types/auth";
@@ -35,6 +36,7 @@ export function InterviewsPage({ groups }: { groups: Role[] }) {
   const [search, setSearch] = useState("");
   const [mineOnly, setMineOnly] = useState(false);
   const [retryToken, setRetryToken] = useState(0);
+  const [selected, setSelected] = useState<InterviewListItem | null>(null);
 
   const load = useCallback(() => {
     let active = true;
@@ -153,7 +155,11 @@ export function InterviewsPage({ groups }: { groups: Role[] }) {
             {!loading &&
               !error &&
               interviews?.map((interview) => (
-                <tr key={interview.interview_id} className="border-t border-slate-200 dark:border-slate-800">
+                <tr
+                  key={interview.interview_id}
+                  className="cursor-pointer border-t border-slate-200 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-900"
+                  onClick={() => setSelected(interview)}
+                >
                   <td className="p-3">
                     <div className="font-medium">{interview.candidate_name || "Unknown candidate"}</div>
                   </td>
@@ -173,6 +179,15 @@ export function InterviewsPage({ groups }: { groups: Role[] }) {
           </tbody>
         </table>
       </div>
+
+      {selected && (
+        <InterviewDetailDrawer
+          interview={selected}
+          groups={groups}
+          onClose={() => setSelected(null)}
+          onChanged={() => setRetryToken((current) => current + 1)}
+        />
+      )}
     </PageShell>
   );
 }

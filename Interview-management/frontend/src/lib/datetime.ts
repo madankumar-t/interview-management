@@ -9,6 +9,14 @@ export function localToUtcIso(date: string, time: string, tz: string): string {
   return dayjs.tz(`${date}T${time}`, tz).utc().toISOString();
 }
 
+export function utcToLocalDate(utcIso: string, tz: string): string {
+  return dayjs.utc(utcIso).tz(tz).format("YYYY-MM-DD");
+}
+
+export function utcToLocalTime(utcIso: string, tz: string): string {
+  return dayjs.utc(utcIso).tz(tz).format("HH:mm");
+}
+
 export function detectTimezone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
