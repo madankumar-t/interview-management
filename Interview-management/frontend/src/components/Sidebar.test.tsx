@@ -16,10 +16,12 @@ describe("Sidebar", () => {
     );
     expect(screen.getByText("Interview Calendar")).not.toBeNull();
     expect(screen.getByText("Interviews")).not.toBeNull();
+    expect(screen.getByText("Schedule Interview")).not.toBeNull();
     expect(screen.getByText("My Schedule")).not.toBeNull();
     expect(screen.getByText("Pending Feedback")).not.toBeNull();
 
     expect(screen.queryByText("Dashboard")).toBeNull();
+    expect(screen.queryByText("My Availability")).toBeNull();
     expect(screen.queryByText("Candidate List")).toBeNull();
     expect(screen.queryByText("Add Candidate")).toBeNull();
     expect(screen.queryByText("Requisition List")).toBeNull();
@@ -39,12 +41,43 @@ describe("Sidebar", () => {
     );
     expect(screen.getByText("Dashboard")).not.toBeNull();
     expect(screen.getByText("Interviews")).not.toBeNull();
+    expect(screen.getByText("Schedule Interview")).not.toBeNull();
     expect(screen.getByText("Candidate List")).not.toBeNull();
+    expect(screen.getByText("Add Candidate")).not.toBeNull();
+    expect(screen.getByText("Requisition List")).not.toBeNull();
+    expect(screen.getByText("Add Requisition")).not.toBeNull();
     expect(screen.getByText("Panel List")).not.toBeNull();
     expect(screen.getByText("Add Panel Member")).not.toBeNull();
+    expect(screen.getByText("My Availability")).not.toBeNull();
+    expect(screen.getByText("Pending Feedback")).not.toBeNull();
     expect(screen.getByText("User Management")).not.toBeNull();
     expect(screen.getByText("Reports")).not.toBeNull();
+    expect(screen.getByText("Audit Log")).not.toBeNull();
 
+    expect(screen.queryByText("Settings")).toBeNull();
+  });
+
+  it("gives Panel only interview, availability, and feedback views", () => {
+    render(
+      <MemoryRouter>
+        <Sidebar groups={["Panel"]} />
+      </MemoryRouter>
+    );
+    expect(screen.getByText("Interview Calendar")).not.toBeNull();
+    expect(screen.getByText("Interviews")).not.toBeNull();
+    expect(screen.getByText("My Schedule")).not.toBeNull();
+    expect(screen.getByText("My Availability")).not.toBeNull();
+    expect(screen.getByText("Pending Feedback")).not.toBeNull();
+
+    expect(screen.queryByText("Dashboard")).toBeNull();
+    expect(screen.queryByText("Schedule Interview")).toBeNull();
+    expect(screen.queryByText("Candidate List")).toBeNull();
+    expect(screen.queryByText("Requisition List")).toBeNull();
+    expect(screen.queryByText("Panel List")).toBeNull();
+    expect(screen.queryByText("Add Panel Member")).toBeNull();
+    expect(screen.queryByText("User Management")).toBeNull();
+    expect(screen.queryByText("Reports")).toBeNull();
+    expect(screen.queryByText("Audit Log")).toBeNull();
     expect(screen.queryByText("Settings")).toBeNull();
   });
 
@@ -55,6 +88,7 @@ describe("Sidebar", () => {
       </MemoryRouter>
     );
     expect(screen.getByText("Dashboard")).not.toBeNull();
+    expect(screen.getByText("Schedule Interview")).not.toBeNull();
     expect(screen.getByText("Candidate List")).not.toBeNull();
     expect(screen.getByText("Panel List")).not.toBeNull();
     expect(screen.getByText("User Management")).not.toBeNull();

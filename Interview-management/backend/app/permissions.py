@@ -42,8 +42,6 @@ ROLE_CAPABILITIES: dict[Role, set[Capability]] = {
     Role.PANEL: {
         Capability.VIEW_INTERVIEWS,
         Capability.SUBMIT_FEEDBACK,
-        Capability.VIEW_REPORTS,
-        Capability.VIEW_AUDIT,
         Capability.MANAGE_AVAILABILITY,
     },
 }

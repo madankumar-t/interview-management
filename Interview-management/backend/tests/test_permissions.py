@@ -9,6 +9,11 @@ def test_panel_cannot_access_other_panel_interview() -> None:
         ScopeContext(department="Engineering", project="Core", panel_subs={"panel-b"}, manager_scopes=set(), actor_sub="panel-a"),
     )
     assert not allowed
+    assert has_capability(user, Capability.MANAGE_AVAILABILITY)
+    assert has_capability(user, Capability.SUBMIT_FEEDBACK)
+    assert not has_capability(user, Capability.ASSIGN_INTERVIEWS)
+    assert not has_capability(user, Capability.VIEW_REPORTS)
+    assert not has_capability(user, Capability.VIEW_AUDIT)
 
 
 def test_manager_scope_restricted() -> None:
@@ -24,6 +29,11 @@ def test_manager_scope_restricted() -> None:
         ),
     )
     assert not blocked
+    assert has_capability(user, Capability.MANAGE_USERS)
+    assert has_capability(user, Capability.MANAGE_CANDIDATES)
+    assert has_capability(user, Capability.MANAGE_SCHEDULING)
+    assert has_capability(user, Capability.VIEW_REPORTS)
+    assert has_capability(user, Capability.VIEW_AUDIT)
 
 
 def test_ta_can_view_all() -> None:

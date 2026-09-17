@@ -4,12 +4,12 @@
 |---|---|---|---|---|
 | Manage users/groups | Yes | Yes | No | No |
 | Manage departments/settings | Yes | No | No | No |
-| View interviews | All | Assigned scope | Assigned/own | Own assigned |
+| View interviews | All | Assigned scope | All | Own assigned |
 | Manage candidates | All | Assigned scope | No | No |
 | Schedule interviews | All | Assigned scope | All visible requisitions | No |
 | Reschedule/cancel interviews | All | Assigned scope | No | No |
 | Manage own availability | Yes | Yes | No | Yes |
-| Submit feedback | Assigned panel | Assigned panel | Assigned panel | Own assigned |
+| Submit feedback | All visible interviews | Assigned scope | All visible interviews | Own assigned |
 | View reports | All | Assigned scope | No | No |
 | View audit | All | Relevant scope | No | No |
 

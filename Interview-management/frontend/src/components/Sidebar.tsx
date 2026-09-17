@@ -5,6 +5,7 @@ const pages = [
   { to: "/", label: "Dashboard", roles: ["Administrator", "Manager"] as Role[] },
   { to: "/calendar", label: "Interview Calendar", roles: ["Administrator", "Manager", "TA", "Panel"] as Role[] },
   { to: "/interviews", label: "Interviews", roles: ["Administrator", "Manager", "TA", "Panel"] as Role[] },
+  { to: "/interviews/new", label: "Schedule Interview", roles: ["Administrator", "Manager", "TA"] as Role[] },
   { to: "/candidates", label: "Candidate List", roles: ["Administrator", "Manager"] as Role[] },
   { to: "/candidates/new", label: "Add Candidate", roles: ["Administrator", "Manager"] as Role[] },
   { to: "/requisitions", label: "Requisition List", roles: ["Administrator", "Manager"] as Role[] },
