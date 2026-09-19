@@ -14,6 +14,9 @@ function describeError(reason: unknown): string {
     if (/identity provider/i.test(message) || /federated sign-in/i.test(message)) {
       return "This user signs in with an external identity provider and cannot receive a Cognito password reset email.";
     }
+    if (/verified email address or phone number/i.test(message)) {
+      return "Verify this user's email address or phone number in Cognito before requesting a password reset.";
+    }
     return "Cannot complete this action: at least one active administrator is required.";
   }
   if (message.startsWith("400")) {
@@ -63,6 +66,8 @@ function UserRow({ user, onChanged }: { user: AdminUser; onChanged: () => void }
   const passwordResetHint =
     user.password_reset_block_reason === "Federated sign-in users must reset their password with their identity provider"
       ? "This user signs in with an external identity provider."
+      : user.password_reset_block_reason?.includes("verified email address or phone number")
+        ? "Cognito has no verified email address or phone number for this user."
       : user.password_reset_block_reason ?? "";
 
   async function saveGroups() {

@@ -14,6 +14,7 @@ class FakeCognitoClient:
                     "Attributes": [
                         {"Name": "sub", "Value": "stable-user-sub"},
                         {"Name": "email", "Value": "user@example.com"},
+                        {"Name": "email_verified", "Value": "true"},
                     ],
                     "Enabled": True,
                     "UserStatus": "CONFIRMED",
@@ -41,6 +42,7 @@ def test_list_users_uses_cognito_username_for_group_lookup():
     assert users[0]["username"] == "cognito-user@example.com"
     assert users[0]["sub"] == "stable-user-sub"
     assert users[0]["groups"] == ["Administrator"]
+    assert users[0]["email_verified"] is True
 
 
 def test_reset_user_password_uses_cognito_username():

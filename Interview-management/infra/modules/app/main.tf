@@ -201,6 +201,12 @@ resource "aws_cognito_user_pool" "main" {
   admin_create_user_config {
     allow_admin_create_user_only = true
   }
+  account_recovery_setting {
+    recovery_mechanism {
+      name     = "verified_email"
+      priority = 1
+    }
+  }
   mfa_configuration = "OPTIONAL"
   software_token_mfa_configuration { enabled = true }
 }

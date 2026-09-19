@@ -87,6 +87,8 @@ class CognitoAdmin:
                         "sub": sub,
                         "username": user["Username"],
                         "email": attrs.get("email", user["Username"]),
+                        "email_verified": attrs.get("email_verified", "").casefold() == "true",
+                        "phone_number_verified": attrs.get("phone_number_verified", "").casefold() == "true",
                         "full_name": attrs.get("name", ""),
                         "enabled": user.get("Enabled", True),
                         "cognito_status": user.get("UserStatus", ""),

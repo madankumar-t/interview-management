@@ -181,6 +181,8 @@ export interface AdminUser {
   status: "ACTIVE" | "DISABLED";
   authz_version: number;
   cognito_status?: string;
+  email_verified?: boolean;
+  phone_number_verified?: boolean;
   password_reset_allowed?: boolean;
   password_reset_block_reason?: string;
 }

@@ -26,6 +26,8 @@ def _password_reset_block_reason(record: dict) -> str | None:
         return "Cannot reset password for a disabled user"
     if record.get("cognito_status") == "EXTERNAL_PROVIDER":
         return "Federated sign-in users must reset their password with their identity provider"
+    if not record.get("email_verified") and not record.get("phone_number_verified"):
+        return "Cognito requires a verified email address or phone number before it can send reset instructions"
     return None
 
 
