@@ -180,6 +180,9 @@ export interface AdminUser {
   groups: string[];
   status: "ACTIVE" | "DISABLED";
   authz_version: number;
+  cognito_status?: string;
+  password_reset_allowed?: boolean;
+  password_reset_block_reason?: string;
 }
 
 export interface AuditRecord {

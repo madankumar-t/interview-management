@@ -11,6 +11,9 @@ function describeError(reason: unknown): string {
     if (/disabled user/i.test(message)) {
       return "Enable this user before requesting a password reset.";
     }
+    if (/identity provider/i.test(message) || /federated sign-in/i.test(message)) {
+      return "This user signs in with an external identity provider and cannot receive a Cognito password reset email.";
+    }
     return "Cannot complete this action: at least one active administrator is required.";
   }
   if (message.startsWith("400")) {
@@ -56,6 +59,11 @@ function UserRow({ user, onChanged }: { user: AdminUser; onChanged: () => void }
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const passwordResetAllowed = user.password_reset_allowed ?? true;
+  const passwordResetHint =
+    user.password_reset_block_reason === "Federated sign-in users must reset their password with their identity provider"
+      ? "This user signs in with an external identity provider."
+      : user.password_reset_block_reason ?? "";
 
   async function saveGroups() {
     setSaving(true);
@@ -165,11 +173,13 @@ function UserRow({ user, onChanged }: { user: AdminUser; onChanged: () => void }
           <button
             type="button"
             className="rounded border border-amber-500 px-3 py-1 text-sm text-amber-800 disabled:opacity-40 dark:text-amber-300"
-            disabled={saving || user.status !== "ACTIVE"}
+            disabled={saving || !passwordResetAllowed}
             onClick={resetPassword}
+            title={passwordResetHint}
           >
             Reset Password
           </button>
+          {passwordResetHint && <span className="self-center text-xs text-slate-500">{passwordResetHint}</span>}
           <button
             type="button"
             className={`rounded px-3 py-1 text-sm text-white disabled:opacity-40 ${

@@ -21,6 +21,14 @@ def _count_active_admins(users: list[dict]) -> int:
     return sum(1 for u in users if "Administrator" in u.get("groups", []) and _is_active(u))
 
 
+def _password_reset_block_reason(record: dict) -> str | None:
+    if not _is_active(record):
+        return "Cannot reset password for a disabled user"
+    if record.get("cognito_status") == "EXTERNAL_PROVIDER":
+        return "Federated sign-in users must reset their password with their identity provider"
+    return None
+
+
 @router.get("/users")
 def list_users(user=CurrentUser):
     require_user_management(user)
@@ -33,6 +41,8 @@ def list_users(user=CurrentUser):
         profile = repo.get_user_profile(record["sub"]) if record["sub"] else None
         record["status"] = "ACTIVE" if record["enabled"] else "DISABLED"
         record["authz_version"] = profile["authz_version"] if profile else 0
+        record["password_reset_block_reason"] = _password_reset_block_reason(record)
+        record["password_reset_allowed"] = record["password_reset_block_reason"] is None
     return users
 
 
@@ -132,8 +142,9 @@ def reset_user_password(user_sub: str, user=CurrentUser):
     target = next((record for record in cognito.list_users() if record["sub"] == user_sub), None)
     if not target:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    if not target.get("enabled", True):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Cannot reset password for a disabled user")
+    block_reason = _password_reset_block_reason(target)
+    if block_reason:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=block_reason)
     try:
         cognito.reset_user_password(target["username"])
     except CognitoAdminError as exc:

@@ -40,4 +40,27 @@ describe("UsersPage password reset", () => {
     await waitFor(() => expect(api.resetAdminUserPassword).toHaveBeenCalledWith("user-1"));
     expect(screen.getByText("Password reset instructions sent to user@example.com.")).toBeTruthy();
   });
+
+  it("disables reset password for federated users", async () => {
+    vi.mocked(api.listAdminUsers).mockResolvedValue([
+      {
+        sub: "user-2",
+        email: "user@example.com",
+        full_name: "Example User",
+        groups: ["Panel"],
+        status: "ACTIVE",
+        authz_version: 1,
+        cognito_status: "EXTERNAL_PROVIDER",
+        password_reset_allowed: false,
+        password_reset_block_reason: "Federated sign-in users must reset their password with their identity provider",
+      },
+    ]);
+
+    render(<UsersPage />);
+
+    const resetButton = await screen.findByRole("button", { name: "Reset Password" });
+    expect(resetButton.hasAttribute("disabled")).toBe(true);
+    expect(screen.getByText("This user signs in with an external identity provider.")).toBeTruthy();
+    expect(api.resetAdminUserPassword).not.toHaveBeenCalled();
+  });
 });
