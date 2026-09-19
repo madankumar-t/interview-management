@@ -10,6 +10,7 @@ import type {
   InterviewListItem,
   PanelMember,
   PanelReport,
+  MonthlyReport,
   RequirementOverview,
   RequisitionSummary,
 } from "../types/domain";
@@ -146,6 +147,8 @@ export const api = {
     request(`/reports/weekly-requirement?week_start=${encodeURIComponent(weekStart)}&timezone=${encodeURIComponent(timezone)}`),
   getPanelReport: (panelType = "") =>
     request<PanelReport>(`/reports/panels?panel_type=${encodeURIComponent(panelType)}`),
+  getMonthlyInterviewsReport: (month: string, timezone = "Asia/Kolkata") =>
+    request<MonthlyReport>(`/reports/monthly-interviews?month=${encodeURIComponent(month)}&timezone=${encodeURIComponent(timezone)}`),
   getRequirementOverview: (filters?: {
     requisitionId?: string;
     clientName?: string;

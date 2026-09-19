@@ -234,3 +234,149 @@ def test_panel_report_splits_internal_and_external_panels(monkeypatch) -> None:
         assert [row["panel_type"] for row in filtered.json()["panels"]] == ["External"]
     finally:
         app.dependency_overrides.clear()
+
+
+def test_monthly_interviews_groups_visible_records_in_requested_timezone(monkeypatch) -> None:
+    requisitions = [
+        {"requisition_id": "REQ-B", "title": "Backend Engineer", "client_name": "Contoso"},
+        {"requisition_id": "REQ-A", "title": "Data Engineer", "client_name": "Fabrikam"},
+    ]
+    interviews = [
+        {
+            "requisition_id": "REQ-B",
+            "start_utc": "2026-08-01T03:59:59+00:00",
+            "status": "Scheduled",
+            "feedback_status": "Not Started",
+        },
+        {
+            "requisition_id": "REQ-B",
+            "start_utc": "2026-08-01T04:00:00+00:00",
+            "status": "Scheduled",
+            "feedback_status": "Submitted",
+        },
+        {
+            "requisition_id": "REQ-B",
+            "start_utc": "2026-08-15T12:00:00+00:00",
+            "status": "In Progress",
+            "feedback_status": "Draft",
+        },
+        {
+            "requisition_id": "REQ-A",
+            "start_utc": "2026-09-01T03:59:59+00:00",
+            "status": "Completed",
+            "feedback_status": "Submitted",
+        },
+        {
+            "requisition_id": "REQ-A",
+            "start_utc": "2026-08-20T12:00:00+00:00",
+            "status": "Cancelled",
+            "feedback_status": "Not Started",
+        },
+        {
+            "requisition_id": "REQ-A",
+            "start_utc": "2026-08-21T12:00:00+00:00",
+            "status": "No Show",
+            "feedback_status": "Not Started",
+        },
+        {
+            "requisition_id": "REQ-A",
+            "start_utc": "2026-09-01T04:00:00+00:00",
+            "status": "Completed",
+            "feedback_status": "Not Started",
+        },
+    ]
+    manager = AuthContext(
+        sub="manager-1",
+        groups={Role.MANAGER},
+        token_use="access",
+        authz_version=1,
+    )
+    seen_users = []
+
+    def records_for_user(user):
+        seen_users.append(user)
+        return requisitions, interviews
+
+    monkeypatch.setattr("app.routers.reports.visible_records", records_for_user)
+    app.dependency_overrides[get_current_user] = _override(manager)
+    try:
+        response = TestClient(app).get(
+            "/reports/monthly-interviews",
+            params={"month": "2026-08", "timezone": "America/New_York"},
+        )
+        assert response.status_code == 200
+        assert seen_users == [manager]
+        assert response.json() == {
+            "month": "2026-08",
+            "month_end_exclusive": "2026-09-01",
+            "timezone": "America/New_York",
+            "summary": {
+                "total": 5,
+                "scheduled": 1,
+                "in_progress": 1,
+                "completed": 1,
+                "cancelled": 1,
+                "no_show": 1,
+                "pending_feedback": 3,
+            },
+            "rows": [
+                {
+                    "requisition_id": "REQ-A",
+                    "title": "Data Engineer",
+                    "client_name": "Fabrikam",
+                    "total": 3,
+                    "scheduled": 0,
+                    "in_progress": 0,
+                    "completed": 1,
+                    "cancelled": 1,
+                    "no_show": 1,
+                    "pending_feedback": 2,
+                },
+                {
+                    "requisition_id": "REQ-B",
+                    "title": "Backend Engineer",
+                    "client_name": "Contoso",
+                    "total": 2,
+                    "scheduled": 1,
+                    "in_progress": 1,
+                    "completed": 0,
+                    "cancelled": 0,
+                    "no_show": 0,
+                    "pending_feedback": 1,
+                },
+            ],
+        }
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_monthly_interviews_rejects_invalid_month(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.routers.reports.visible_records",
+        lambda _user: (_ for _ in ()).throw(AssertionError("visible_records should not be called")),
+    )
+    app.dependency_overrides[get_current_user] = _override(
+        AuthContext(sub="manager-1", groups={Role.MANAGER}, token_use="access", authz_version=1)
+    )
+    try:
+        response = TestClient(app).get("/reports/monthly-interviews", params={"month": "2026-8"})
+        assert response.status_code == 422
+        assert response.json()["detail"] == "Invalid month format. Use YYYY-MM"
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_monthly_interviews_requires_view_reports(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.routers.reports.visible_records",
+        lambda _user: (_ for _ in ()).throw(AssertionError("visible_records should not be called")),
+    )
+    app.dependency_overrides[get_current_user] = _override(
+        AuthContext(sub="ta-1", groups={Role.TA}, token_use="access", authz_version=1)
+    )
+    try:
+        response = TestClient(app).get("/reports/monthly-interviews", params={"month": "2026-08"})
+        assert response.status_code == 403
+        assert response.json()["detail"] == "Insufficient permissions"
+    finally:
+        app.dependency_overrides.clear()

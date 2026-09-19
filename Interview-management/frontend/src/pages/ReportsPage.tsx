@@ -3,6 +3,7 @@ import { PageShell } from "../components/PageShell";
 import { RequirementReport } from "../components/RequirementReport";
 import { PanelReport } from "../components/PanelReport";
 import { api } from "../lib/api";
+import type { MonthlyReport } from "../types/domain";
 
 interface DailyReport {
   date: string;
@@ -35,10 +36,48 @@ interface WeeklyReport {
   }>;
 }
 
+function downloadCsv(report: MonthlyReport): void {
+  const headers = [
+    "Requisition ID",
+    "Title",
+    "Client",
+    "Total",
+    "Scheduled",
+    "In Progress",
+    "Completed",
+    "Cancelled",
+    "No Show",
+    "Pending Feedback",
+  ];
+  const values = report.rows.map((row) => [
+    row.requisition_id,
+    row.title,
+    row.client_name,
+    row.total,
+    row.scheduled,
+    row.in_progress,
+    row.completed,
+    row.cancelled,
+    row.no_show,
+    row.pending_feedback,
+  ]);
+  const escape = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`;
+  const csv = [headers, ...values].map((row) => row.map(escape).join(",")).join("\r\n");
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `interview-report-${report.month}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 export function ReportsPage() {
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const currentMonth = today.slice(0, 7);
   const [date, setDate] = useState(today);
   const [weekStart, setWeekStart] = useState(today);
+  const [month, setMonth] = useState(currentMonth);
+  const [monthly, setMonthly] = useState<MonthlyReport | null>(null);
   const [daily, setDaily] = useState<DailyReport | null>(null);
   const [weekly, setWeekly] = useState<WeeklyReport | null>(null);
   const [error, setError] = useState("");
@@ -57,6 +96,15 @@ export function ReportsPage() {
     }
   }
 
+  async function loadMonthlyReport() {
+    try {
+      setError("");
+      setMonthly(await api.getMonthlyInterviewsReport(month));
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+
   return (
     <PageShell title="Reports">
       <section className="mb-8 space-y-3">
@@ -67,6 +115,86 @@ export function ReportsPage() {
         <RequirementReport />
       </section>
       <PanelReport />
+      <section className="space-y-4 border-t border-slate-200 pt-6 dark:border-slate-800">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold text-sky-800 dark:text-sky-300">Monthly Interview Dashboard</h3>
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              Monthly status totals and a requisition/client pivot table.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <input
+              type="month"
+              value={month}
+              onChange={(event) => setMonth(event.target.value)}
+              className="rounded border border-slate-300 p-2 dark:border-slate-700 dark:bg-slate-900"
+              aria-label="Monthly report month"
+            />
+            <button type="button" className="rounded bg-indigo-600 px-4 py-2 text-white" onClick={loadMonthlyReport}>
+              Load Monthly Report
+            </button>
+            <button
+              type="button"
+              className="rounded border border-indigo-600 px-4 py-2 text-indigo-700 disabled:opacity-40 dark:text-indigo-300"
+              onClick={() => monthly && downloadCsv(monthly)}
+              disabled={!monthly}
+            >
+              Download CSV
+            </button>
+          </div>
+        </div>
+        {monthly && (
+          <>
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              {([
+                ["Total", monthly.summary.total],
+                ["Scheduled", monthly.summary.scheduled],
+                ["Completed", monthly.summary.completed],
+                ["Pending feedback", monthly.summary.pending_feedback],
+              ] as const).map(([label, value]) => (
+                <article key={label} className="rounded-lg border border-sky-200 bg-sky-50 p-4 dark:border-sky-900 dark:bg-slate-900">
+                  <p className="text-sm text-slate-600 dark:text-slate-300">{label}</p>
+                  <p className="mt-1 text-3xl font-semibold text-sky-800 dark:text-sky-300">{value}</p>
+                </article>
+              ))}
+            </div>
+            <div className="overflow-auto rounded border border-slate-200 dark:border-slate-800">
+              <table className="min-w-full text-sm">
+                <thead className="bg-slate-100 dark:bg-slate-900">
+                  <tr>
+                    <th className="p-3 text-left">Requisition</th>
+                    <th className="p-3 text-left">Client</th>
+                    <th className="p-3 text-right">Total</th>
+                    <th className="p-3 text-right">Scheduled</th>
+                    <th className="p-3 text-right">In progress</th>
+                    <th className="p-3 text-right">Completed</th>
+                    <th className="p-3 text-right">Cancelled</th>
+                    <th className="p-3 text-right">No show</th>
+                    <th className="p-3 text-right">Pending feedback</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {monthly.rows.map((row) => (
+                    <tr key={row.requisition_id} className="border-t border-slate-200 dark:border-slate-800">
+                      <td className="p-3"><div className="font-medium">{row.requisition_id}</div><div className="text-slate-500">{row.title}</div></td>
+                      <td className="p-3">{row.client_name || "--"}</td>
+                      <td className="p-3 text-right font-semibold">{row.total}</td>
+                      <td className="p-3 text-right">{row.scheduled}</td>
+                      <td className="p-3 text-right">{row.in_progress}</td>
+                      <td className="p-3 text-right">{row.completed}</td>
+                      <td className="p-3 text-right">{row.cancelled}</td>
+                      <td className="p-3 text-right">{row.no_show}</td>
+                      <td className="p-3 text-right">{row.pending_feedback}</td>
+                    </tr>
+                  ))}
+                  {monthly.rows.length === 0 && <tr><td colSpan={9} className="p-6 text-center text-slate-500">No interviews found for this month.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </section>
       <section className="space-y-4 border-t border-slate-200 pt-6 dark:border-slate-800">
         <h3 className="text-lg font-semibold text-sky-800 dark:text-sky-300">Date-based Interview Reports</h3>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">

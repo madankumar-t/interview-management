@@ -162,6 +162,35 @@ export interface PanelReport {
   panels: PanelReportRow[];
 }
 
+export interface MonthlyReportRow {
+  requisition_id: string;
+  title: string;
+  client_name: string;
+  total: number;
+  scheduled: number;
+  in_progress: number;
+  completed: number;
+  cancelled: number;
+  no_show: number;
+  pending_feedback: number;
+}
+
+export interface MonthlyReport {
+  month: string;
+  month_end_exclusive: string;
+  timezone: string;
+  summary: {
+    total: number;
+    scheduled: number;
+    in_progress: number;
+    completed: number;
+    cancelled: number;
+    no_show: number;
+    pending_feedback: number;
+  };
+  rows: MonthlyReportRow[];
+}
+
 export interface FeedbackRecord {
   interview_id: string;
   competency_scores: Record<string, number>;
