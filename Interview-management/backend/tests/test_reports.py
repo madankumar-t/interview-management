@@ -345,6 +345,7 @@ def test_monthly_interviews_groups_visible_records_in_requested_timezone(monkeyp
                     "pending_feedback": 1,
                 },
             ],
+            "panel_rows": [],
         }
     finally:
         app.dependency_overrides.clear()

@@ -175,6 +175,20 @@ export interface MonthlyReportRow {
   pending_feedback: number;
 }
 
+export interface MonthlyPanelReportRow {
+  panel_sub: string;
+  full_name: string;
+  email: string;
+  panel_type: string;
+  total: number;
+  scheduled: number;
+  in_progress: number;
+  completed: number;
+  cancelled: number;
+  no_show: number;
+  pending_feedback: number;
+}
+
 export interface MonthlyReport {
   month: string;
   month_end_exclusive: string;
@@ -189,6 +203,7 @@ export interface MonthlyReport {
     pending_feedback: number;
   };
   rows: MonthlyReportRow[];
+  panel_rows: MonthlyPanelReportRow[];
 }
 
 export interface FeedbackRecord {

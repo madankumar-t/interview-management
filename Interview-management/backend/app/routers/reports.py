@@ -330,6 +330,34 @@ def monthly_interviews(
             row["pending_feedback"] += 1
 
     rows = sorted(grouped.values(), key=lambda item: item["requisition_id"])
+    panel_details = {panel["sub"]: panel for panel in _panel_records()} if any(
+        interview.get("panel_subs") for interview in interviews
+    ) else {}
+    panel_grouped: dict[str, dict] = {}
+    for interview in interviews:
+        interview_date = to_local_date(interview["start_utc"], timezone_name)
+        if not month_start <= interview_date < month_end:
+            continue
+        status_key = interview.get("status", "").casefold().replace(" ", "_")
+        for panel_sub in interview.get("panel_subs", []):
+            panel = panel_details.get(panel_sub, {})
+            row = panel_grouped.setdefault(
+                panel_sub,
+                {
+                    "panel_sub": panel_sub,
+                    "full_name": panel.get("full_name", ""),
+                    "email": panel.get("email", ""),
+                    "panel_type": panel.get("panel_type", ""),
+                    "total": 0,
+                    **{key: 0 for key in count_keys},
+                },
+            )
+            row["total"] += 1
+            if status_key in count_keys:
+                row[status_key] += 1
+            if interview.get("feedback_status", "Not Started") != "Submitted":
+                row["pending_feedback"] += 1
+    panel_rows = sorted(panel_grouped.values(), key=lambda item: (item["full_name"] or item["email"] or item["panel_sub"]).casefold())
     return {
         "month": month,
         "month_end_exclusive": month_end.isoformat(),
@@ -339,4 +367,5 @@ def monthly_interviews(
             **{key: sum(row[key] for row in rows) for key in count_keys},
         },
         "rows": rows,
+        "panel_rows": panel_rows,
     }

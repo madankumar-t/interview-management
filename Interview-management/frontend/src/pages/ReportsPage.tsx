@@ -61,8 +61,29 @@ function downloadCsv(report: MonthlyReport): void {
     row.no_show,
     row.pending_feedback,
   ]);
+  const panelValues = report.panel_rows.map((row) => [
+    row.panel_sub,
+    row.full_name || row.email,
+    row.panel_type,
+    row.total,
+    row.scheduled,
+    row.in_progress,
+    row.completed,
+    row.cancelled,
+    row.no_show,
+    row.pending_feedback,
+  ]);
   const escape = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`;
-  const csv = [headers, ...values].map((row) => row.map(escape).join(",")).join("\r\n");
+  const panelHeaders = ["Panel Sub", "Panel Member", "Panel Type", ...headers.slice(3)];
+  const csv = [
+    ["Requirement/Client Pivot"],
+    headers,
+    ...values,
+    [],
+    ["Panel-wise Pivot"],
+    panelHeaders,
+    ...panelValues,
+  ].map((row) => row.map(escape).join(",")).join("\r\n");
   const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
   const link = document.createElement("a");
   link.href = url;
@@ -189,6 +210,42 @@ export function ReportsPage() {
                     </tr>
                   ))}
                   {monthly.rows.length === 0 && <tr><td colSpan={9} className="p-6 text-center text-slate-500">No interviews found for this month.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+            <div className="overflow-auto rounded border border-slate-200 dark:border-slate-800">
+              <h4 className="border-b border-slate-200 bg-slate-100 p-3 font-semibold dark:border-slate-800 dark:bg-slate-900">
+                Panel-wise Monthly Pivot
+              </h4>
+              <table className="min-w-full text-sm">
+                <thead className="bg-slate-50 dark:bg-slate-950">
+                  <tr>
+                    <th className="p-3 text-left">Panel Member</th>
+                    <th className="p-3 text-left">Type</th>
+                    <th className="p-3 text-right">Total</th>
+                    <th className="p-3 text-right">Scheduled</th>
+                    <th className="p-3 text-right">In progress</th>
+                    <th className="p-3 text-right">Completed</th>
+                    <th className="p-3 text-right">Cancelled</th>
+                    <th className="p-3 text-right">No show</th>
+                    <th className="p-3 text-right">Pending feedback</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {monthly.panel_rows.map((row) => (
+                    <tr key={row.panel_sub} className="border-t border-slate-200 dark:border-slate-800">
+                      <td className="p-3"><div className="font-medium">{row.full_name || row.email || row.panel_sub}</div><div className="text-xs text-slate-500">{row.email}</div></td>
+                      <td className="p-3">{row.panel_type || "--"}</td>
+                      <td className="p-3 text-right font-semibold">{row.total}</td>
+                      <td className="p-3 text-right">{row.scheduled}</td>
+                      <td className="p-3 text-right">{row.in_progress}</td>
+                      <td className="p-3 text-right">{row.completed}</td>
+                      <td className="p-3 text-right">{row.cancelled}</td>
+                      <td className="p-3 text-right">{row.no_show}</td>
+                      <td className="p-3 text-right">{row.pending_feedback}</td>
+                    </tr>
+                  ))}
+                  {monthly.panel_rows.length === 0 && <tr><td colSpan={9} className="p-6 text-center text-slate-500">No panel assignments found for this month.</td></tr>}
                 </tbody>
               </table>
             </div>
