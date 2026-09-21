@@ -238,6 +238,28 @@ class FeedbackSubmitRequest(BaseModel):
     interview_id: str
 
 
+class OrganizationSettings(BaseModel):
+    company_name: str = "Interview Management"
+    support_email: str | None = None
+    support_phone: str | None = None
+    logo_url: str | None = None
+    updated_at: str | None = None
+    updated_by: str | None = None
+
+
+class OrganizationSettingsUpdateRequest(BaseModel):
+    company_name: str = Field(min_length=1, max_length=200)
+    support_email: str | None = Field(default=None, max_length=200)
+    support_phone: str | None = Field(default=None, max_length=50)
+    logo_url: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_support_email(self) -> "OrganizationSettingsUpdateRequest":
+        if self.support_email and "@" not in self.support_email:
+            raise ValueError("support_email must be a valid email address")
+        return self
+
+
 class AdminCreateUserRequest(BaseModel):
     email: str
     full_name: str | None = None

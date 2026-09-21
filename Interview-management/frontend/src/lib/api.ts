@@ -8,6 +8,7 @@ import type {
   ConflictCheck,
   FeedbackRecord,
   InterviewListItem,
+  OrganizationSettings,
   PanelMember,
   PanelReport,
   MonthlyReport,
@@ -141,6 +142,9 @@ export const api = {
   resetAdminUserPassword: (sub: string) =>
     request<{ sub: string; message: string }>(`/admin/users/${sub}/reset-password`, { method: "POST" }),
   listAudit: () => request<AuditRecord[]>("/audit"),
+  getOrganizationSettings: () => request<OrganizationSettings>("/settings/organization"),
+  updateOrganizationSettings: (body: { company_name: string; support_email?: string | null; support_phone?: string | null; logo_url?: string | null }) =>
+    request<OrganizationSettings>("/settings/organization", { method: "PUT", body: JSON.stringify(body) }),
   getDailyInterviewsReport: (date: string, timezone = "Asia/Kolkata") =>
     request(`/reports/daily-interviews?date=${encodeURIComponent(date)}&timezone=${encodeURIComponent(timezone)}`),
   getWeeklyRequirementReport: (weekStart: string, timezone = "Asia/Kolkata") =>

@@ -17,7 +17,7 @@ import { PendingFeedbackPage } from "./pages/PendingFeedbackPage";
 import { MyAvailabilityPage } from "./pages/MyAvailabilityPage";
 import { UsersPage } from "./pages/UsersPage";
 import { AuditPage } from "./pages/AuditPage";
-import { SimplePage } from "./pages/SimplePage";
+import { SettingsPage } from "./pages/SettingsPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { config } from "./lib/config";
 import { getSession, handleAuthCallback, login, SESSION_EXPIRED_EVENT } from "./lib/auth";
@@ -97,7 +97,7 @@ function App() {
           <Route path="/pending-feedback" element={<RoleRoute session={session} roles={["Administrator", "Manager", "TA", "Panel"]}><PendingFeedbackPage session={session} /></RoleRoute>} />
           <Route path="/reports" element={<RoleRoute session={session} roles={["Administrator", "Manager"]}><ReportsPage /></RoleRoute>} />
           <Route path="/users" element={<RoleRoute session={session} roles={["Administrator", "Manager"]}><UsersPage /></RoleRoute>} />
-          {isAdmin && <Route path="/settings" element={<SimplePage title="Settings" />} />}
+          {isAdmin && <Route path="/settings" element={<SettingsPage />} />}
           <Route path="/audit" element={<RoleRoute session={session} roles={["Administrator", "Manager"]}><AuditPage /></RoleRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

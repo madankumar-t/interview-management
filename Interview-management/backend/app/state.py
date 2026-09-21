@@ -21,6 +21,16 @@ class LocalState:
     requisitions: dict[str, dict[str, Any]] = field(default_factory=dict)
     feedback: dict[str, dict[str, Any]] = field(default_factory=dict)
     audit: list[dict[str, Any]] = field(default_factory=list)
+    organization_settings: dict[str, Any] = field(
+        default_factory=lambda: {
+            "company_name": "Interview Management",
+            "support_email": None,
+            "support_phone": None,
+            "logo_url": None,
+            "updated_at": None,
+            "updated_by": None,
+        }
+    )
     scheduling_store: InMemoryScheduleStore = field(default_factory=InMemoryScheduleStore)
 
     @property

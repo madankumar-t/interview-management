@@ -254,6 +254,73 @@ class DynamoRepository:
         )
         return int(response["Attributes"]["authz_version"]["N"])
 
+    def get_organization_settings(self) -> dict[str, Any] | None:
+        response = self.client.get_item(
+            TableName=self.table_name,
+            Key={"pk": {"S": "ORG#SETTINGS"}, "sk": {"S": "SETTINGS"}},
+            ConsistentRead=True,
+        )
+        item = response.get("Item")
+        if not item:
+            return None
+        return {
+            "company_name": item.get("company_name", {}).get("S", "Interview Management"),
+            "support_email": item.get("support_email", {}).get("S") or None,
+            "support_phone": item.get("support_phone", {}).get("S") or None,
+            "logo_url": item.get("logo_url", {}).get("S") or None,
+            "updated_at": item.get("updated_at", {}).get("S") or None,
+            "updated_by": item.get("updated_by", {}).get("S") or None,
+        }
+
+    def put_organization_settings(
+        self,
+        company_name: str,
+        support_email: str | None,
+        support_phone: str | None,
+        logo_url: str | None,
+        actor_sub: str,
+        actor_email: str,
+        actor_roles: list[str],
+    ) -> dict[str, Any]:
+        now = utc_now_iso()
+        tx_items: list[dict[str, Any]] = [
+            {
+                "Put": {
+                    "TableName": self.table_name,
+                    "Item": {
+                        "pk": {"S": "ORG#SETTINGS"},
+                        "sk": {"S": "SETTINGS"},
+                        "entity_type": {"S": "organization_settings"},
+                        "company_name": {"S": company_name},
+                        "support_email": {"S": support_email or ""},
+                        "support_phone": {"S": support_phone or ""},
+                        "logo_url": {"S": logo_url or ""},
+                        "updated_at": {"S": now},
+                        "updated_by": {"S": actor_sub},
+                    },
+                }
+            }
+        ]
+        self._put_audit(
+            tx_items,
+            "settings",
+            "organization",
+            "updated",
+            actor_sub,
+            f"company_name={company_name}",
+            actor_email,
+            actor_roles,
+        )
+        self.client.transact_write_items(TransactItems=tx_items)
+        return {
+            "company_name": company_name,
+            "support_email": support_email,
+            "support_phone": support_phone,
+            "logo_url": logo_url,
+            "updated_at": now,
+            "updated_by": actor_sub,
+        }
+
     def list_reporting_records(self) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         requisitions: list[dict[str, Any]] = []
         interviews: list[dict[str, Any]] = []

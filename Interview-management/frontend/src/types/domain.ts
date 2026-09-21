@@ -217,6 +217,15 @@ export interface FeedbackRecord {
   status: "Draft" | "Submitted";
 }
 
+export interface OrganizationSettings {
+  company_name: string;
+  support_email: string | null;
+  support_phone: string | null;
+  logo_url: string | null;
+  updated_at: string | null;
+  updated_by: string | null;
+}
+
 export interface AdminUser {
   sub: string;
   email: string;
