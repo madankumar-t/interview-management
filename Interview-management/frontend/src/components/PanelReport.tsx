@@ -96,6 +96,7 @@ export function PanelReport() {
                   <th className="p-3">Scheduled</th>
                   <th className="p-3">Completed</th>
                   <th className="p-3">Cancelled</th>
+                  <th className="p-3">Rejected</th>
                   <th className="p-3">Pending Feedback</th>
                 </tr>
               </thead>
@@ -109,11 +110,12 @@ export function PanelReport() {
                     <td className="p-3">{panel.scheduled}</td>
                     <td className="p-3">{panel.completed}</td>
                     <td className="p-3">{panel.cancelled}</td>
+                    <td className="p-3">{panel.rejected ?? 0}</td>
                     <td className="p-3">{panel.pending_feedback}</td>
                   </tr>
                 ))}
                 {report.panels.length === 0 && (
-                  <tr><td colSpan={8} className="p-6 text-center text-slate-500">No panel members found for this filter.</td></tr>
+                  <tr><td colSpan={9} className="p-6 text-center text-slate-500">No panel members found for this filter.</td></tr>
                 )}
               </tbody>
             </table>

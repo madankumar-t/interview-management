@@ -5,13 +5,12 @@ from fastapi import APIRouter, HTTPException, status
 from app.auth import CurrentUser
 from app.config import settings
 from app.deps import can_access_scope, require_capability
-from app.models import FeedbackSubmitRequest, FeedbackUpsertRequest, utc_now_iso
+from app.models import INTERVIEW_FEEDBACK_ELIGIBLE_STATUSES, FeedbackSubmitRequest, FeedbackUpsertRequest, utc_now_iso
 from app.permissions import Capability
 from app.repository import ConflictError, DynamoRepository
 from app.state import local_state
 
 router = APIRouter(prefix="/feedback", tags=["feedback"])
-FEEDBACK_ELIGIBLE_STATUSES = {"Scheduled", "Completed"}
 
 
 def require_feedback_access(interview, user, demo_mode: bool) -> None:
@@ -21,7 +20,7 @@ def require_feedback_access(interview, user, demo_mode: bool) -> None:
     project = interview.project if demo_mode else interview["project"]
     if not can_access_scope(user, department, project, set(panel_subs)):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to provide feedback")
-    if interview_status not in FEEDBACK_ELIGIBLE_STATUSES:
+    if interview_status not in INTERVIEW_FEEDBACK_ELIGIBLE_STATUSES:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Feedback is only available for scheduled or completed interviews",

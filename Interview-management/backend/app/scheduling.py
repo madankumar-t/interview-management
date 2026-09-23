@@ -174,6 +174,7 @@ class SchedulingService:
             venue=payload.get("venue"),
             instructions=payload.get("instructions"),
             required_skills=payload.get("required_skills", []),
+            status=payload.get("status", "L1 Scheduled"),
         )
         return self.store.create(interview, payload["idempotency_key"])
 
@@ -187,4 +188,3 @@ class SchedulingService:
             reason=payload["reason"],
             idempotency_key=payload["idempotency_key"],
         )
-

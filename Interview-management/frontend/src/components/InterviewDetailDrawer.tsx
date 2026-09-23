@@ -3,6 +3,7 @@ import type { InterviewListItem } from "../types/domain";
 import type { Role } from "../types/auth";
 import { api } from "../lib/api";
 import { detectTimezone, utcToLocalDate, utcToLocalTime } from "../lib/datetime";
+import { INTERVIEW_ACTIVE_STATUSES, INTERVIEW_STATUSES } from "../lib/interviewStatus";
 
 const MANAGE_ROLES: Role[] = ["Administrator", "Manager"];
 
@@ -38,15 +39,16 @@ export function InterviewDetailDrawer({
   onChanged: () => void;
 }) {
   const canManage = MANAGE_ROLES.some((role) => groups.includes(role));
-  const isActive = interview.status === "Scheduled" || interview.status === "In Progress";
+  const isActive = INTERVIEW_ACTIVE_STATUSES.has(interview.status);
 
-  const [mode, setMode] = useState<"view" | "reschedule" | "cancel">("view");
+  const [mode, setMode] = useState<"view" | "reschedule" | "cancel" | "status">("view");
   const initialTz = interview.timezone || detectTimezone();
   const [date, setDate] = useState(utcToLocalDate(interview.start_utc, initialTz));
   const [startTime, setStartTime] = useState(utcToLocalTime(interview.start_utc, initialTz));
   const [endTime, setEndTime] = useState(utcToLocalTime(interview.end_utc, initialTz));
   const [tz, setTz] = useState(initialTz);
   const [reason, setReason] = useState("");
+  const [nextStatus, setNextStatus] = useState(interview.status);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -82,6 +84,24 @@ export function InterviewDetailDrawer({
       await api.cancelInterview(interview.interview_id, {
         reason,
         idempotency_key: crypto.randomUUID(),
+        expected_version: interview.version,
+      });
+      onChanged();
+      onClose();
+    } catch (reasonErr) {
+      setError(describeError(reasonErr));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function submitStatusChange() {
+    setSubmitting(true);
+    setError("");
+    try {
+      await api.updateInterviewStatus(interview.interview_id, {
+        status: nextStatus,
+        reason: reason || undefined,
         expected_version: interview.version,
       });
       onChanged();
@@ -167,6 +187,13 @@ export function InterviewDetailDrawer({
                 </button>
               </div>
             )}
+            {canManage && (
+              <div className="pt-2">
+                <button type="button" className="rounded border border-indigo-600 px-3 py-2 text-indigo-700 dark:text-indigo-300" onClick={() => setMode("status")}>
+                  Update Status
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -232,6 +259,41 @@ export function InterviewDetailDrawer({
                 onClick={submitCancel}
               >
                 {submitting ? "Cancelling…" : "Confirm Cancellation"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {mode === "status" && (
+          <div className="space-y-3">
+            {error && <p className="rounded bg-red-50 p-2 text-sm text-red-700">{error}</p>}
+            <div>
+              <label className="mb-1 block text-sm font-medium">Status</label>
+              <select
+                className="w-full rounded border border-slate-300 p-2 dark:border-slate-700 dark:bg-slate-900"
+                value={nextStatus}
+                onChange={(event) => setNextStatus(event.target.value)}
+              >
+                {INTERVIEW_STATUSES.map((value) => <option key={value}>{value}</option>)}
+              </select>
+            </div>
+            <textarea
+              className="w-full rounded border border-slate-300 p-2 dark:border-slate-700 dark:bg-slate-900"
+              placeholder="Reason or note (optional)"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+            />
+            <div className="flex gap-2">
+              <button type="button" className="rounded border border-slate-300 px-3 py-2 dark:border-slate-700" onClick={() => setMode("view")}>
+                Back
+              </button>
+              <button
+                type="button"
+                className="rounded bg-indigo-600 px-3 py-2 text-white disabled:opacity-40 hover:bg-indigo-700"
+                disabled={submitting || nextStatus === interview.status}
+                onClick={submitStatusChange}
+              >
+                {submitting ? "Saving…" : "Save Status"}
               </button>
             </div>
           </div>

@@ -18,8 +18,53 @@ class InterviewStatus(str, Enum):
     SCHEDULED = "Scheduled"
     IN_PROGRESS = "In Progress"
     COMPLETED = "Completed"
+    L1_SCHEDULED = "L1 Scheduled"
+    L1_COMPLETED = "L1 Completed"
+    L2_SCHEDULED = "L2 Scheduled"
+    L2_COMPLETED = "L2 Completed"
+    CLIENT_ROUND_SCHEDULED = "Client Round Scheduled"
+    CLIENT_ROUND_COMPLETED = "Client Round Completed"
+    REJECTED = "Rejected"
     CANCELLED = "Cancelled"
     NO_SHOW = "No Show"
+
+
+INTERVIEW_SCHEDULED_STATUSES = {
+    InterviewStatus.SCHEDULED.value,
+    InterviewStatus.L1_SCHEDULED.value,
+    InterviewStatus.L2_SCHEDULED.value,
+    InterviewStatus.CLIENT_ROUND_SCHEDULED.value,
+}
+INTERVIEW_COMPLETED_STATUSES = {
+    InterviewStatus.COMPLETED.value,
+    InterviewStatus.L1_COMPLETED.value,
+    InterviewStatus.L2_COMPLETED.value,
+    InterviewStatus.CLIENT_ROUND_COMPLETED.value,
+}
+INTERVIEW_ACTIVE_STATUSES = {
+    *INTERVIEW_SCHEDULED_STATUSES,
+    InterviewStatus.IN_PROGRESS.value,
+}
+INTERVIEW_FEEDBACK_ELIGIBLE_STATUSES = {
+    *INTERVIEW_SCHEDULED_STATUSES,
+    *INTERVIEW_COMPLETED_STATUSES,
+}
+
+
+def interview_status_bucket(status: str) -> str:
+    if status in INTERVIEW_SCHEDULED_STATUSES:
+        return "scheduled"
+    if status in INTERVIEW_COMPLETED_STATUSES:
+        return "completed"
+    if status == InterviewStatus.IN_PROGRESS.value:
+        return "in_progress"
+    if status == InterviewStatus.CANCELLED.value:
+        return "cancelled"
+    if status == InterviewStatus.NO_SHOW.value:
+        return "no_show"
+    if status == InterviewStatus.REJECTED.value:
+        return "rejected"
+    return ""
 
 
 class FeedbackStatus(str, Enum):
@@ -222,6 +267,12 @@ class RescheduleInterviewRequest(BaseModel):
 class CancelInterviewRequest(BaseModel):
     reason: str
     idempotency_key: str
+    expected_version: int
+
+
+class InterviewStatusUpdateRequest(BaseModel):
+    status: InterviewStatus
+    reason: str | None = None
     expected_version: int
 
 

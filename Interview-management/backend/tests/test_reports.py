@@ -317,6 +317,7 @@ def test_monthly_interviews_groups_visible_records_in_requested_timezone(monkeyp
                 "completed": 1,
                 "cancelled": 1,
                 "no_show": 1,
+                "rejected": 0,
                 "pending_feedback": 3,
             },
             "rows": [
@@ -330,6 +331,7 @@ def test_monthly_interviews_groups_visible_records_in_requested_timezone(monkeyp
                     "completed": 1,
                     "cancelled": 1,
                     "no_show": 1,
+                    "rejected": 0,
                     "pending_feedback": 2,
                 },
                 {
@@ -342,6 +344,7 @@ def test_monthly_interviews_groups_visible_records_in_requested_timezone(monkeyp
                     "completed": 0,
                     "cancelled": 0,
                     "no_show": 0,
+                    "rejected": 0,
                     "pending_feedback": 1,
                 },
             ],

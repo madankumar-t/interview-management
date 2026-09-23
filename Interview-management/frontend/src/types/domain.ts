@@ -48,6 +48,7 @@ export interface RequirementReportRow extends Requisition {
   completed: number;
   cancelled: number;
   no_show: number;
+  rejected?: number;
   pending_feedback: number;
 }
 
@@ -148,6 +149,7 @@ export interface PanelReportRow {
   completed: number;
   cancelled: number;
   no_show: number;
+  rejected?: number;
   pending_feedback: number;
 }
 
@@ -172,6 +174,7 @@ export interface MonthlyReportRow {
   completed: number;
   cancelled: number;
   no_show: number;
+  rejected?: number;
   pending_feedback: number;
 }
 
@@ -186,6 +189,7 @@ export interface MonthlyPanelReportRow {
   completed: number;
   cancelled: number;
   no_show: number;
+  rejected?: number;
   pending_feedback: number;
 }
 
@@ -200,6 +204,7 @@ export interface MonthlyReport {
     completed: number;
     cancelled: number;
     no_show: number;
+    rejected: number;
     pending_feedback: number;
   };
   rows: MonthlyReportRow[];

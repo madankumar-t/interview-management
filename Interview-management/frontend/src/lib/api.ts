@@ -126,6 +126,8 @@ export const api = {
   getInterview: (id: string) => request<InterviewListItem>(`/interviews/${id}`),
   rescheduleInterview: (id: string, body: unknown) =>
     request(`/interviews/${id}/reschedule`, { method: "POST", body: JSON.stringify(body) }),
+  updateInterviewStatus: (id: string, body: unknown) =>
+    request(`/interviews/${id}/status`, { method: "POST", body: JSON.stringify(body) }),
   cancelInterview: (id: string, body: unknown) =>
     request(`/interviews/${id}/cancel`, { method: "POST", body: JSON.stringify(body) }),
   saveFeedbackDraft: (body: unknown) => request<FeedbackRecord>("/feedback/draft", { method: "POST", body: JSON.stringify(body) }),

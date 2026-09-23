@@ -4,16 +4,9 @@ import dayjs from "dayjs";
 import { PageShell } from "../components/PageShell";
 import { InterviewDetailDrawer } from "../components/InterviewDetailDrawer";
 import { api } from "../lib/api";
+import { INTERVIEW_FEEDBACK_ELIGIBLE_STATUSES, STATUS_STYLES } from "../lib/interviewStatus";
 import type { InterviewListItem } from "../types/domain";
 import type { Role } from "../types/auth";
-
-const STATUS_STYLES: Record<string, string> = {
-  Scheduled: "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-200",
-  "In Progress": "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200",
-  Completed: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200",
-  Cancelled: "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
-  "No Show": "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200",
-};
 
 function describeError(reason: unknown): string {
   const message = reason instanceof Error ? reason.message : String(reason);
@@ -161,7 +154,7 @@ export function MySchedulePage({ groups }: { groups: Role[] }) {
                   interview={interview}
                   onOpen={() => setSelected(interview)}
                   showJoin={false}
-                  showFeedback={interview.status === "Completed"}
+                  showFeedback={INTERVIEW_FEEDBACK_ELIGIBLE_STATUSES.has(interview.status)}
                 />
               ))}
             </div>

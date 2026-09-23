@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from app.auth import CurrentUser
 from app.deps import require_capability
 from app.config import settings
-from app.models import Role
+from app.models import INTERVIEW_ACTIVE_STATUSES, INTERVIEW_FEEDBACK_ELIGIBLE_STATUSES, INTERVIEW_SCHEDULED_STATUSES, Role, interview_status_bucket
 from app.permissions import Capability
 from app.records import CLOSED_REQUIREMENT_STATUSES, resolve_timezone, to_local_date, visible_records
 from app.repository import DynamoRepository
@@ -44,7 +44,9 @@ def _requirement_rows(requisitions: list[dict], interviews: list[dict]) -> list[
     for interview in interviews:
         stats = counters[interview["requisition_id"]]
         stats["interviews_total"] += 1
-        stats[interview["status"]] += 1
+        bucket = interview_status_bucket(interview["status"])
+        if bucket:
+            stats[bucket] += 1
         if interview.get("feedback_status", "Not Started") != "Submitted":
             stats["pending_feedback"] += 1
 
@@ -61,11 +63,12 @@ def _requirement_rows(requisitions: list[dict], interviews: list[dict]) -> list[
                 "positions_filled": positions_filled,
                 "positions_open": int(requisition.get("positions_open", max(0, positions_total - positions_filled))),
                 "interviews_total": stats["interviews_total"],
-                "scheduled": stats["Scheduled"],
-                "in_progress": stats["In Progress"],
-                "completed": stats["Completed"],
-                "cancelled": stats["Cancelled"],
-                "no_show": stats["No Show"],
+                "scheduled": stats["scheduled"],
+                "in_progress": stats["in_progress"],
+                "completed": stats["completed"],
+                "cancelled": stats["cancelled"],
+                "no_show": stats["no_show"],
+                "rejected": stats["rejected"],
                 "pending_feedback": stats["pending_feedback"],
             }
         )
@@ -143,7 +146,7 @@ def overview(
             "today_interviews": sum(to_local_date(item["start_utc"], timezone_name) == today for item in filtered_interviews),
             "upcoming_interviews": sum(
                 _parse_datetime(item["start_utc"]) >= datetime.now(timezone.utc)
-                and item["status"] in {"Scheduled", "In Progress"}
+                and item["status"] in INTERVIEW_ACTIVE_STATUSES
                 for item in filtered_interviews
             ),
             "pending_feedback": sum(item.get("feedback_status", "Not Started") != "Submitted" for item in filtered_interviews),
@@ -184,13 +187,14 @@ def panel_report(user=CurrentUser, panel_type: str = Query(default="")):
             {
                 **panel,
                 "interviews_total": len(assigned),
-                "scheduled": sum(interview.get("status") == "Scheduled" for interview in assigned),
-                "in_progress": sum(interview.get("status") == "In Progress" for interview in assigned),
-                "completed": sum(interview.get("status") == "Completed" for interview in assigned),
-                "cancelled": sum(interview.get("status") == "Cancelled" for interview in assigned),
-                "no_show": sum(interview.get("status") == "No Show" for interview in assigned),
+                "scheduled": sum(interview_status_bucket(interview.get("status", "")) == "scheduled" for interview in assigned),
+                "in_progress": sum(interview_status_bucket(interview.get("status", "")) == "in_progress" for interview in assigned),
+                "completed": sum(interview_status_bucket(interview.get("status", "")) == "completed" for interview in assigned),
+                "cancelled": sum(interview_status_bucket(interview.get("status", "")) == "cancelled" for interview in assigned),
+                "no_show": sum(interview_status_bucket(interview.get("status", "")) == "no_show" for interview in assigned),
+                "rejected": sum(interview_status_bucket(interview.get("status", "")) == "rejected" for interview in assigned),
                 "pending_feedback": sum(
-                    interview.get("status") in {"Scheduled", "Completed"}
+                    interview.get("status") in INTERVIEW_FEEDBACK_ELIGIBLE_STATUSES
                     and panel["sub"] not in submitted_authors.get(interview["interview_id"], set())
                     for interview in assigned
                 ),
@@ -230,7 +234,7 @@ def daily_interviews(
     grouped: dict[str, dict] = {}
     rows: list[dict] = []
     for interview in interviews:
-        if interview["status"] != "Scheduled" or to_local_date(interview["start_utc"], timezone_name) != selected_date:
+        if interview["status"] not in INTERVIEW_SCHEDULED_STATUSES or to_local_date(interview["start_utc"], timezone_name) != selected_date:
             continue
         requisition = requisitions_by_id.get(interview["requisition_id"], {})
         item = grouped.setdefault(
@@ -302,7 +306,7 @@ def monthly_interviews(
     month_end = (month_start.replace(day=28) + timedelta(days=4)).replace(day=1)
     requisitions, interviews = visible_records(user)
     requisitions_by_id = {item["requisition_id"]: item for item in requisitions}
-    count_keys = ("scheduled", "in_progress", "completed", "cancelled", "no_show", "pending_feedback")
+    count_keys = ("scheduled", "in_progress", "completed", "cancelled", "no_show", "rejected", "pending_feedback")
     grouped: dict[str, dict] = {}
 
     for interview in interviews:
@@ -323,7 +327,7 @@ def monthly_interviews(
             },
         )
         row["total"] += 1
-        status_key = interview.get("status", "").casefold().replace(" ", "_")
+        status_key = interview_status_bucket(interview.get("status", ""))
         if status_key in count_keys:
             row[status_key] += 1
         if interview.get("feedback_status", "Not Started") != "Submitted":
@@ -338,7 +342,7 @@ def monthly_interviews(
         interview_date = to_local_date(interview["start_utc"], timezone_name)
         if not month_start <= interview_date < month_end:
             continue
-        status_key = interview.get("status", "").casefold().replace(" ", "_")
+        status_key = interview_status_bucket(interview.get("status", ""))
         for panel_sub in interview.get("panel_subs", []):
             panel = panel_details.get(panel_sub, {})
             row = panel_grouped.setdefault(

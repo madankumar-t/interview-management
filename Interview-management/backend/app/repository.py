@@ -61,6 +61,7 @@ class SchedulePayload:
     actor_email: str
     actor_roles: list[str]
     idempotency_key: str
+    status: str = InterviewStatus.L1_SCHEDULED.value
 
 
 class DynamoRepository:
@@ -740,7 +741,7 @@ class DynamoRepository:
                         "venue": {"S": payload.venue or ""},
                         "instructions": {"S": payload.instructions or ""},
                         "required_skills": {"SS": payload.required_skills or ["general"]},
-                        "status": {"S": InterviewStatus.SCHEDULED.value},
+                        "status": {"S": payload.status},
                         "version": {"N": "1"},
                         "feedback_status": {"S": "Not Started"},
                         "gsi1pk": {"S": f"PANEL#{payload.lead_panel_sub}"},
@@ -771,7 +772,7 @@ class DynamoRepository:
             raise
         return {
             "interview_id": payload.interview_id,
-            "status": InterviewStatus.SCHEDULED.value,
+            "status": payload.status,
             "version": 1,
         }
 
@@ -873,6 +874,42 @@ class DynamoRepository:
         current = self.get_interview(interview_id)
         if not current:
             raise KeyError("Interview missing after reschedule")
+        return current
+
+    def update_interview_status(
+        self,
+        interview_id: str,
+        status_value: str,
+        reason: str | None,
+        actor_sub: str,
+        expected_version: int,
+    ) -> dict[str, Any]:
+        tx_items: list[dict[str, Any]] = [
+            {
+                "Update": {
+                    "TableName": self.table_name,
+                    "Key": {"pk": {"S": f"INTERVIEW#{interview_id}"}, "sk": {"S": "PROFILE"}},
+                    "UpdateExpression": "SET #status = :status, #v = #v + :one",
+                    "ConditionExpression": "#v = :expected_version",
+                    "ExpressionAttributeNames": {"#v": "version", "#status": "status"},
+                    "ExpressionAttributeValues": {
+                        ":status": {"S": status_value},
+                        ":one": {"N": "1"},
+                        ":expected_version": {"N": str(expected_version)},
+                    },
+                }
+            }
+        ]
+        self._put_audit(tx_items, "interview", interview_id, "status_updated", actor_sub, reason or status_value)
+        try:
+            self.client.transact_write_items(TransactItems=tx_items)
+        except ClientError as exc:
+            if exc.response["Error"]["Code"] == "TransactionCanceledException":
+                raise ConflictError("Status update conflict or stale version") from exc
+            raise
+        current = self.get_interview(interview_id)
+        if not current:
+            raise KeyError("Interview missing after status update")
         return current
 
     def cancel_interview(self, interview_id: str, reason: str, actor_sub: str, expected_version: int, idempotency_key: str) -> dict[str, Any]:

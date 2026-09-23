@@ -9,13 +9,29 @@ from app.auth import CurrentUser
 from app.availability_service import unavailable_panel_subs
 from app.config import settings
 from app.deps import assert_sensitive_user_authorization, can_access_scope, require_capability
-from app.models import CancelInterviewRequest, RescheduleInterviewRequest, ScheduleInterviewRequest, utc_now_iso
+from app.models import (
+    CancelInterviewRequest,
+    InterviewStatus,
+    InterviewStatusUpdateRequest,
+    RescheduleInterviewRequest,
+    ScheduleInterviewRequest,
+    utc_now_iso,
+)
 from app.permissions import Capability
 from app.records import list_candidates_for_lookup, to_local_date, visible_records
 from app.repository import ConflictError, DynamoRepository, SchedulePayload, parse_local_to_utc
 from app.state import local_state
 
 router = APIRouter(prefix="/interviews", tags=["interviews"])
+
+
+def _initial_status(payload: ScheduleInterviewRequest) -> str:
+    round_label = f"{payload.round_name} {payload.interview_type}".casefold()
+    if "client" in round_label:
+        return InterviewStatus.CLIENT_ROUND_SCHEDULED.value
+    if "round 2" in round_label or "l2" in round_label:
+        return InterviewStatus.L2_SCHEDULED.value
+    return InterviewStatus.L1_SCHEDULED.value
 
 
 @router.get("")
@@ -86,6 +102,7 @@ def schedule_interview(payload: ScheduleInterviewRequest, user=CurrentUser):
                 **payload.model_dump(),
                 "department": req["department"],
                 "project": req["project"],
+                "status": _initial_status(payload),
             }
         )
         local_state.audit.append(
@@ -124,6 +141,7 @@ def schedule_interview(payload: ScheduleInterviewRequest, user=CurrentUser):
         actor_email=user.email or "",
         actor_roles=sorted(role.value for role in user.groups),
         idempotency_key=payload.idempotency_key,
+        status=_initial_status(payload),
     )
     try:
         return repo.schedule_interview(schedule_payload)
@@ -187,6 +205,32 @@ def reschedule_interview(interview_id: str, payload: RescheduleInterviewRequest,
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/{interview_id}/status")
+def update_interview_status(interview_id: str, payload: InterviewStatusUpdateRequest, user=CurrentUser):
+    require_capability(user, Capability.MANAGE_SCHEDULING)
+    assert_sensitive_user_authorization(user)
+    status_value = payload.status.value
+    if settings.demo_mode:
+        current = local_state.scheduling_store.get(interview_id)
+        if not current:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Interview not found")
+        if not can_access_scope(user, current.department, current.project, set(current.panel_subs)):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+        if current.version != payload.expected_version:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Interview version mismatch")
+        current.status = status_value
+        current.version += 1
+        current.history.append({"action": "status_updated", "status": status_value, "reason": payload.reason, "at": utc_now_iso()})
+        return current.__dict__
+    repo = DynamoRepository()
+    try:
+        return repo.update_interview_status(interview_id, status_value, payload.reason, user.sub, payload.expected_version)
+    except ConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
 @router.post("/{interview_id}/cancel")

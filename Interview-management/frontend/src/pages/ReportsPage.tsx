@@ -47,6 +47,7 @@ function downloadCsv(report: MonthlyReport): void {
     "Completed",
     "Cancelled",
     "No Show",
+    "Rejected",
     "Pending Feedback",
   ];
   const values = report.rows.map((row) => [
@@ -59,6 +60,7 @@ function downloadCsv(report: MonthlyReport): void {
     row.completed,
     row.cancelled,
     row.no_show,
+    row.rejected ?? 0,
     row.pending_feedback,
   ]);
   const panelValues = report.panel_rows.map((row) => [
@@ -71,6 +73,7 @@ function downloadCsv(report: MonthlyReport): void {
     row.completed,
     row.cancelled,
     row.no_show,
+    row.rejected ?? 0,
     row.pending_feedback,
   ]);
   const escape = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`;
@@ -172,6 +175,7 @@ export function ReportsPage() {
                 ["Total", monthly.summary.total],
                 ["Scheduled", monthly.summary.scheduled],
                 ["Completed", monthly.summary.completed],
+                ["Rejected", monthly.summary.rejected],
                 ["Pending feedback", monthly.summary.pending_feedback],
               ] as const).map(([label, value]) => (
                 <article key={label} className="rounded-lg border border-sky-200 bg-sky-50 p-4 dark:border-sky-900 dark:bg-slate-900">
@@ -192,6 +196,7 @@ export function ReportsPage() {
                     <th className="p-3 text-right">Completed</th>
                     <th className="p-3 text-right">Cancelled</th>
                     <th className="p-3 text-right">No show</th>
+                    <th className="p-3 text-right">Rejected</th>
                     <th className="p-3 text-right">Pending feedback</th>
                   </tr>
                 </thead>
@@ -206,10 +211,11 @@ export function ReportsPage() {
                       <td className="p-3 text-right">{row.completed}</td>
                       <td className="p-3 text-right">{row.cancelled}</td>
                       <td className="p-3 text-right">{row.no_show}</td>
+                      <td className="p-3 text-right">{row.rejected ?? 0}</td>
                       <td className="p-3 text-right">{row.pending_feedback}</td>
                     </tr>
                   ))}
-                  {monthly.rows.length === 0 && <tr><td colSpan={9} className="p-6 text-center text-slate-500">No interviews found for this month.</td></tr>}
+                  {monthly.rows.length === 0 && <tr><td colSpan={10} className="p-6 text-center text-slate-500">No interviews found for this month.</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -228,6 +234,7 @@ export function ReportsPage() {
                     <th className="p-3 text-right">Completed</th>
                     <th className="p-3 text-right">Cancelled</th>
                     <th className="p-3 text-right">No show</th>
+                    <th className="p-3 text-right">Rejected</th>
                     <th className="p-3 text-right">Pending feedback</th>
                   </tr>
                 </thead>
@@ -242,10 +249,11 @@ export function ReportsPage() {
                       <td className="p-3 text-right">{row.completed}</td>
                       <td className="p-3 text-right">{row.cancelled}</td>
                       <td className="p-3 text-right">{row.no_show}</td>
+                      <td className="p-3 text-right">{row.rejected ?? 0}</td>
                       <td className="p-3 text-right">{row.pending_feedback}</td>
                     </tr>
                   ))}
-                  {monthly.panel_rows.length === 0 && <tr><td colSpan={9} className="p-6 text-center text-slate-500">No panel assignments found for this month.</td></tr>}
+                  {monthly.panel_rows.length === 0 && <tr><td colSpan={10} className="p-6 text-center text-slate-500">No panel assignments found for this month.</td></tr>}
                 </tbody>
               </table>
             </div>

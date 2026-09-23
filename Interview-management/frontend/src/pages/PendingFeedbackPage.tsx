@@ -3,14 +3,13 @@ import { Link } from "react-router-dom";
 import dayjs from "dayjs";
 import { PageShell } from "../components/PageShell";
 import { api } from "../lib/api";
+import { INTERVIEW_FEEDBACK_ELIGIBLE_STATUSES } from "../lib/interviewStatus";
 import type { UserSession } from "../types/auth";
 import type { FeedbackRecord, InterviewListItem } from "../types/domain";
 
 type FeedbackQueueItem = InterviewListItem & {
   myFeedback?: FeedbackRecord;
 };
-
-const ELIGIBLE_STATUSES = new Set(["Scheduled", "Completed"]);
 
 function describeError(reason: unknown): string {
   const message = reason instanceof Error ? reason.message : String(reason);
@@ -49,7 +48,7 @@ export function PendingFeedbackPage({ session }: { session: UserSession }) {
     try {
       const hasBroaderAccess = session.groups.some((role) => role === "Administrator" || role === "Manager" || role === "TA");
       const response = await api.listInterviews({ mineOnly: !hasBroaderAccess });
-      const eligible = response.interviews.filter((interview) => ELIGIBLE_STATUSES.has(interview.status));
+      const eligible = response.interviews.filter((interview) => INTERVIEW_FEEDBACK_ELIGIBLE_STATUSES.has(interview.status));
       const withFeedback = await Promise.all(
         eligible.map(async (interview) => {
           const records = await api.getFeedbackForInterview(interview.interview_id);

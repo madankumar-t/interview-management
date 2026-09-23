@@ -10,7 +10,7 @@ from app.availability_service import unavailable_panel_subs
 from app.config import settings
 from app.deps import require_capability
 from app.identity import CognitoAdmin
-from app.models import PanelCreateRequest, PanelStatusUpdateRequest, utc_now_iso
+from app.models import INTERVIEW_ACTIVE_STATUSES, PanelCreateRequest, PanelStatusUpdateRequest, utc_now_iso
 from app.permissions import Capability
 from app.records import visible_records
 from app.repository import DynamoRepository
@@ -134,7 +134,7 @@ def check_conflicts(
     _, interviews = visible_records(user)
     conflicts = []
     for interview in interviews:
-        if interview.get("status") not in ("Scheduled", "In Progress"):
+        if interview.get("status") not in INTERVIEW_ACTIVE_STATUSES:
             continue
         overlap_subs = subs.intersection(interview.get("panel_subs", []))
         if not overlap_subs:
