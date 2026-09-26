@@ -121,8 +121,10 @@ function UserRow({ user, onChanged }: { user: AdminUser; onChanged: () => void }
     setError("");
     setMessage("");
     try {
-      await api.resetAdminUserPassword(user.sub);
-      setMessage(`Password reset instructions sent to ${user.email}.`);
+      const result = await api.resetAdminUserPassword(user.sub);
+      setMessage(result.message.startsWith("Invitation resent")
+        ? `New invitation sent to ${user.email} with a temporary password.`
+        : `Password reset instructions sent to ${user.email}.`);
     } catch (reason) {
       setError(describePasswordResetError(reason));
     } finally {

@@ -88,6 +88,39 @@ def test_production_reset_targets_username_and_blocks_disabled_user(monkeypatch)
         app.dependency_overrides.clear()
 
 
+def test_production_reset_resends_invitation_for_unconfirmed_user(monkeypatch) -> None:
+    class FakeCognito:
+        invitation_username = ""
+
+        def list_users(self):
+            return [{
+                "sub": "target-1",
+                "username": "target@example.com",
+                "email": "target@example.com",
+                "enabled": True,
+                "email_verified": True,
+                "cognito_status": "FORCE_CHANGE_PASSWORD",
+                "groups": ["Panel"],
+            }]
+
+        def resend_user_invitation(self, username):
+            FakeCognito.invitation_username = username
+
+        def reset_user_password(self, username):
+            raise AssertionError(f"reset_user_password should not be called for {username}")
+
+    monkeypatch.setattr(config.settings, "demo_mode", False)
+    monkeypatch.setattr("app.routers.admin.CognitoAdmin", FakeCognito)
+    app.dependency_overrides[get_current_user] = _user(Role.ADMINISTRATOR)
+    try:
+        response = TestClient(app).post("/admin/users/target-1/reset-password")
+        assert response.status_code == 200
+        assert response.json()["message"] == "Invitation resent with a new temporary password"
+        assert FakeCognito.invitation_username == "target@example.com"
+    finally:
+        app.dependency_overrides.clear()
+
+
 def test_production_reset_blocks_federated_user(monkeypatch) -> None:
     class FakeCognito:
         def list_users(self):

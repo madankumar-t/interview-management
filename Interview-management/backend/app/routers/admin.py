@@ -148,7 +148,12 @@ def reset_user_password(user_sub: str, user=CurrentUser):
     if block_reason:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=block_reason)
     try:
-        cognito.reset_user_password(target["username"])
+        if target.get("cognito_status") == "FORCE_CHANGE_PASSWORD":
+            cognito.resend_user_invitation(target["username"])
+            message = "Invitation resent with a new temporary password"
+        else:
+            cognito.reset_user_password(target["username"])
+            message = "Password reset requested"
     except CognitoAdminError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     local_state.audit.append(
@@ -160,7 +165,7 @@ def reset_user_password(user_sub: str, user=CurrentUser):
             "at": utc_now_iso(),
         }
     )
-    return {"sub": user_sub, "message": "Password reset requested"}
+    return {"sub": user_sub, "message": message}
 
 
 @router.post("/users/{user_sub}/groups")

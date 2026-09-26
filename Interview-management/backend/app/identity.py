@@ -71,6 +71,17 @@ class CognitoAdmin:
         except ClientError as exc:
             raise CognitoAdminError(exc.response["Error"].get("Message", str(exc))) from exc
 
+    def resend_user_invitation(self, username: str) -> None:
+        try:
+            self.client.admin_create_user(
+                UserPoolId=self.user_pool_id,
+                Username=username,
+                MessageAction="RESEND",
+                DesiredDeliveryMediums=["EMAIL"],
+            )
+        except ClientError as exc:
+            raise CognitoAdminError(exc.response["Error"].get("Message", str(exc))) from exc
+
     def list_users(self) -> list[dict[str, Any]]:
         users: list[dict[str, Any]] = []
         pagination_token: str | None = None
