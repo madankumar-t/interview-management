@@ -1,5 +1,6 @@
 Param(
-  [string]$OutputZip = "..\\artifacts\\backend.zip"
+  [string]$OutputZip = "..\\artifacts\\backend.zip",
+  [string]$PythonExecutable = "python"
 )
 
 $ErrorActionPreference = "Stop"
@@ -14,7 +15,7 @@ if (Test-Path $buildDir) {
 }
 New-Item -ItemType Directory -Path $buildDir | Out-Null
 
-d:/Users/kumar.madan/code/Sazemaker/.venv/Scripts/python.exe -m pip install . -t $buildDir
+& $PythonExecutable -m pip install . -t $buildDir --platform manylinux2014_x86_64 --python-version 3.12 --implementation cp --abi cp312 --only-binary=:all:
 if ($LASTEXITCODE -ne 0) {
   throw "pip install failed while building Lambda package"
 }

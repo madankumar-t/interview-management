@@ -144,7 +144,6 @@ export function MyAvailabilityPage() {
                   Date
                   <input
                     type="date"
-                    min={dayjs().format("YYYY-MM-DD")}
                     className="mt-1 block w-full rounded border border-slate-300 p-2 dark:border-slate-700 dark:bg-slate-900"
                     value={slot.date}
                     onChange={(event) => updateSlot(slot.id, "date", event.target.value)}

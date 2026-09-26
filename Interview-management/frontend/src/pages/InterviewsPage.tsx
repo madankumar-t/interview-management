@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { PageShell } from "../components/PageShell";
 import { InterviewDetailDrawer } from "../components/InterviewDetailDrawer";
 import { api } from "../lib/api";
+import { detectTimezone } from "../lib/datetime";
 import { INTERVIEW_STATUSES, STATUS_STYLES } from "../lib/interviewStatus";
 import type { InterviewListItem } from "../types/domain";
 import type { Role } from "../types/auth";
@@ -26,6 +27,7 @@ export function InterviewsPage({ groups }: { groups: Role[] }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
+  const [date, setDate] = useState("");
   const [search, setSearch] = useState("");
   const [mineOnly, setMineOnly] = useState(false);
   const [retryToken, setRetryToken] = useState(0);
@@ -36,7 +38,7 @@ export function InterviewsPage({ groups }: { groups: Role[] }) {
     setLoading(true);
     setError("");
     api
-      .listInterviews({ status, q: search, mineOnly })
+      .listInterviews({ status, q: search, mineOnly, startDate: date, endDate: date, timezone: detectTimezone() })
       .then((data) => {
         if (active) {
           setInterviews(data.interviews);
@@ -56,14 +58,14 @@ export function InterviewsPage({ groups }: { groups: Role[] }) {
     return () => {
       active = false;
     };
-  }, [status, search, mineOnly]);
+  }, [status, date, search, mineOnly]);
 
   useEffect(() => load(), [load, retryToken]);
 
   return (
     <PageShell title="Interviews">
       <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="flex flex-1 flex-col gap-3 md:flex-row">
+        <div className="flex flex-1 flex-col gap-3 md:flex-row md:flex-wrap">
           <input
             className="rounded border border-slate-300 p-2 dark:border-slate-700 dark:bg-slate-900"
             placeholder="Search candidate, requirement, or requisition ID"
@@ -79,6 +81,16 @@ export function InterviewsPage({ groups }: { groups: Role[] }) {
             <option value="">All statuses</option>
             {INTERVIEW_STATUSES.map((value) => <option key={value}>{value}</option>)}
           </select>
+          <label className="flex items-center gap-2 text-sm">
+            Date
+            <input
+              type="date"
+              className="rounded border border-slate-300 p-2 dark:border-slate-700 dark:bg-slate-900"
+              value={date}
+              onChange={(event) => setDate(event.target.value)}
+              aria-label="Filter by interview date"
+            />
+          </label>
           <label className="flex items-center gap-2 rounded border border-slate-300 px-3 dark:border-slate-700">
             <input type="checkbox" checked={mineOnly} onChange={(event) => setMineOnly(event.target.checked)} />
             My interviews only

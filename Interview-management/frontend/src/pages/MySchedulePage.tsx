@@ -4,6 +4,7 @@ import dayjs from "dayjs";
 import { PageShell } from "../components/PageShell";
 import { InterviewDetailDrawer } from "../components/InterviewDetailDrawer";
 import { api } from "../lib/api";
+import { detectTimezone } from "../lib/datetime";
 import { INTERVIEW_FEEDBACK_ELIGIBLE_STATUSES, STATUS_STYLES } from "../lib/interviewStatus";
 import type { InterviewListItem } from "../types/domain";
 import type { Role } from "../types/auth";
@@ -74,19 +75,35 @@ export function MySchedulePage({ groups }: { groups: Role[] }) {
   const [error, setError] = useState("");
   const [selected, setSelected] = useState<InterviewListItem | null>(null);
   const [retryToken, setRetryToken] = useState(0);
+  const [month, setMonth] = useState("");
 
   const load = useCallback(() => {
+    let active = true;
     setLoading(true);
     setError("");
     api
-      .listInterviews({ mineOnly: true })
-      .then((data) => setInterviews(data.interviews))
-      .catch((reason: unknown) => {
-        setInterviews([]);
-        setError(describeError(reason));
+      .listInterviews({
+        mineOnly: true,
+        startDate: month ? `${month}-01` : undefined,
+        endDate: month ? dayjs(`${month}-01`).endOf("month").format("YYYY-MM-DD") : undefined,
+        timezone: detectTimezone(),
       })
-      .finally(() => setLoading(false));
-  }, []);
+      .then((data) => {
+        if (active) setInterviews(data.interviews);
+      })
+      .catch((reason: unknown) => {
+        if (active) {
+          setInterviews([]);
+          setError(describeError(reason));
+        }
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [month]);
 
   useEffect(() => load(), [load, retryToken]);
 
@@ -111,6 +128,23 @@ export function MySchedulePage({ groups }: { groups: Role[] }) {
 
   return (
     <PageShell title="My Schedule">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <label className="flex items-center gap-2 text-sm">
+          Month
+          <input
+            type="month"
+            className="rounded border border-slate-300 p-2 dark:border-slate-700 dark:bg-slate-900"
+            value={month}
+            onChange={(event) => setMonth(event.target.value)}
+            aria-label="Filter by month"
+          />
+        </label>
+        {month && (
+          <button type="button" className="text-sm text-indigo-700 hover:underline dark:text-indigo-300" onClick={() => setMonth("")}>
+            Clear month
+          </button>
+        )}
+      </div>
       {error && (
         <div role="alert" className="mb-4 flex items-center justify-between gap-3 rounded bg-red-50 p-3 text-red-700">
           <span>{error}</span>

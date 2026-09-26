@@ -37,6 +37,21 @@ function describeError(reason: unknown): string {
   return "Unable to load users.";
 }
 
+function describePasswordResetError(reason: unknown): string {
+  const message = reason instanceof Error ? reason.message : String(reason);
+  if (message.startsWith("400:")) {
+    try {
+      const response = JSON.parse(message.slice(4)) as { detail?: unknown };
+      if (typeof response.detail === "string" && response.detail.trim()) {
+        return `Password reset failed: ${response.detail}`;
+      }
+    } catch {
+      return "Cognito could not start the password reset. Please try again or check the server logs.";
+    }
+  }
+  return describeError(reason);
+}
+
 function RoleCheckboxes({ selected, onChange }: { selected: string[]; onChange: (roles: string[]) => void }) {
   return (
     <div className="flex flex-wrap gap-3">
@@ -109,7 +124,7 @@ function UserRow({ user, onChanged }: { user: AdminUser; onChanged: () => void }
       await api.resetAdminUserPassword(user.sub);
       setMessage(`Password reset instructions sent to ${user.email}.`);
     } catch (reason) {
-      setError(describeError(reason));
+      setError(describePasswordResetError(reason));
     } finally {
       setSaving(false);
     }

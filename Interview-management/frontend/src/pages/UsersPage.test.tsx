@@ -41,6 +41,27 @@ describe("UsersPage password reset", () => {
     expect(screen.getByText("Password reset instructions sent to user@example.com.")).toBeTruthy();
   });
 
+  it("shows the Cognito reason when a password reset fails", async () => {
+    vi.mocked(api.listAdminUsers).mockResolvedValue([
+      {
+        sub: "user-1",
+        email: "user@example.com",
+        full_name: "Example User",
+        groups: ["Panel"],
+        status: "ACTIVE",
+        authz_version: 1,
+      },
+    ]);
+    vi.mocked(api.resetAdminUserPassword).mockRejectedValue(
+      new Error('400: {"detail":"Cannot reset password because email delivery is not configured"}'),
+    );
+
+    render(<UsersPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Reset Password" }));
+
+    expect(await screen.findByText("Password reset failed: Cannot reset password because email delivery is not configured")).toBeTruthy();
+  });
+
   it("disables reset password for federated users", async () => {
     vi.mocked(api.listAdminUsers).mockResolvedValue([
       {
