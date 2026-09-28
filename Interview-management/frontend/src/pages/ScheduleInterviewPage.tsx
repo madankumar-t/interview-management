@@ -1,17 +1,19 @@
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { PageShell } from "../components/PageShell";
 import { SearchSelect } from "../components/SearchSelect";
 import { MultiSearchSelect } from "../components/MultiSearchSelect";
 import { TagInput } from "../components/TagInput";
 import { api } from "../lib/api";
-import { detectTimezone, durationMinutes, formatDuration, localToUtcIso, timezoneOptions } from "../lib/datetime";
+import { INTERVIEW_STATUSES } from "../lib/interviewStatus";
+import { detectTimezone, durationMinutes, formatDuration, localToUtcIso, timezoneOptions, utcToLocalTime } from "../lib/datetime";
 import type { CandidateSummary, Conflict, PanelMember, RequisitionSummary } from "../types/domain";
 
 const STEPS = ["Candidate & Role", "Round & Panel", "Date, Availability & Location", "Review & Schedule"] as const;
 
 const ROUND_TYPES = ["technical", "coding", "managerial", "HR", "client"];
 const INTERVIEW_ROUNDS = ["Round 1", "Round 2", "Round 3", "Final"];
+const SCHEDULED_STATUSES = INTERVIEW_STATUSES.filter((status) => status === "Scheduled" || status.endsWith(" Scheduled"));
 
 function describeError(reason: unknown): string {
   const message = reason instanceof Error ? reason.message : String(reason);
@@ -44,6 +46,7 @@ export function ScheduleInterviewPage() {
   // Step 2
   const [roundType, setRoundType] = useState(ROUND_TYPES[0]);
   const [interviewRound, setInterviewRound] = useState(INTERVIEW_ROUNDS[0]);
+  const [initialStatus, setInitialStatus] = useState("");
   const [requiredSkills, setRequiredSkills] = useState<string[]>([]);
   const [panelMembers, setPanelMembers] = useState<PanelMember[]>([]);
   const [leadPanelSub, setLeadPanelSub] = useState("");
@@ -65,16 +68,30 @@ export function ScheduleInterviewPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [created, setCreated] = useState<{ interview_id: string; status: string } | null>(null);
+  const [availableSlots, setAvailableSlots] = useState<{ start_utc: string; end_utc: string }[] | null>(null);
+  const [slotError, setSlotError] = useState(false);
 
   const tzOptions = useMemo(() => timezoneOptions(), []);
   const duration = durationMinutes(startTime, endTime);
+  const panelSubs = panelMembers.map((member) => member.sub).join(",");
+
+  useEffect(() => {
+    if (step !== 2 || !date || !panelSubs || duration < 15 || duration > 480 || !tz) return;
+    let active = true;
+    setAvailableSlots(null);
+    setSlotError(false);
+    api.getAvailableSlots(panelSubs.split(","), date, tz, duration, candidate?.candidate_id)
+      .then((result) => { if (active) setAvailableSlots(result.slots); })
+      .catch(() => { if (active) setSlotError(true); });
+    return () => { active = false; };
+  }, [step, date, panelSubs, duration, tz, candidate?.candidate_id]);
 
   function stepIsValid(index: number): boolean {
     if (index === 0) {
       return Boolean(candidate && requisition);
     }
     if (index === 1) {
-      return panelMembers.length > 0 && Boolean(leadPanelSub);
+      return panelMembers.length > 0 && Boolean(leadPanelSub) && Boolean(initialStatus);
     }
     if (index === 2) {
       return Boolean(date) && duration > 0 && Boolean(tz) && (mode === "Online" ? Boolean(meetingUrl) : Boolean(venue));
@@ -93,7 +110,7 @@ export function ScheduleInterviewPage() {
     try {
       const startUtc = localToUtcIso(date, startTime, tz);
       const endUtc = localToUtcIso(date, endTime, tz);
-      const result = await api.checkConflicts(panelMembers.map((p) => p.sub), startUtc, endUtc);
+      const result = await api.checkConflicts(panelMembers.map((p) => p.sub), startUtc, endUtc, candidate?.candidate_id);
       setConflicts(result.conflicts);
       setUnavailablePanelSubs(result.unavailable_panel_subs);
     } catch {
@@ -106,7 +123,7 @@ export function ScheduleInterviewPage() {
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
-    if (!candidate || !requisition) {
+    if (!candidate || !requisition || checkingConflicts || conflicts === null || conflicts.length > 0 || unavailablePanelSubs.length > 0) {
       return;
     }
     setSubmitting(true);
@@ -117,6 +134,7 @@ export function ScheduleInterviewPage() {
         requisition_id: requisition.requisition_id,
         round_name: roundType,
         interview_type: interviewRound,
+        status: initialStatus,
         required_skills: requiredSkills,
         panel_subs: panelMembers.map((p) => p.sub),
         lead_panel_sub: leadPanelSub,
@@ -293,6 +311,7 @@ export function ScheduleInterviewPage() {
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Lead Interviewer *</label>
               <select
+                aria-label="Lead interviewer"
                 className="w-full rounded border border-slate-300 p-2 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900"
                 value={leadPanelSub}
                 disabled={panelMembers.length === 0}
@@ -306,6 +325,19 @@ export function ScheduleInterviewPage() {
                 ))}
               </select>
             </div>
+            <div>
+              <label htmlFor="initial-interview-status" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Interview Status *</label>
+              <select
+                id="initial-interview-status"
+                className="w-full rounded border border-slate-300 p-2 dark:border-slate-700 dark:bg-slate-900"
+                value={initialStatus}
+                onChange={(event) => setInitialStatus(event.target.value)}
+                required
+              >
+                <option value="">Select status</option>
+                {SCHEDULED_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
+              </select>
+            </div>
           </div>
         )}
 
@@ -315,6 +347,7 @@ export function ScheduleInterviewPage() {
               <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Date *</label>
               <input
                 type="date"
+                aria-label="Interview date"
                 className="w-full rounded border border-slate-300 p-2 dark:border-slate-700 dark:bg-slate-900"
                 value={date}
                 onChange={(event) => setDate(event.target.value)}
@@ -326,6 +359,7 @@ export function ScheduleInterviewPage() {
                 <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Start Time *</label>
                 <input
                   type="time"
+                  aria-label="Start time"
                   className="w-full rounded border border-slate-300 p-2 dark:border-slate-700 dark:bg-slate-900"
                   value={startTime}
                   onChange={(event) => setStartTime(event.target.value)}
@@ -336,12 +370,39 @@ export function ScheduleInterviewPage() {
                 <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">End Time *</label>
                 <input
                   type="time"
+                  aria-label="End time"
                   className="w-full rounded border border-slate-300 p-2 dark:border-slate-700 dark:bg-slate-900"
                   value={endTime}
                   onChange={(event) => setEndTime(event.target.value)}
                   required
                 />
               </div>
+            </div>
+            <div className="md:col-span-2">
+              <h3 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">Open times for the selected panel</h3>
+              {date && duration >= 15 && duration <= 480 ? (
+                slotError ? <p role="alert" className="text-sm text-red-700">Unable to check open times. Try another date or reload.</p> :
+                availableSlots === null ? <p className="text-sm text-slate-500">Finding open times…</p> :
+                availableSlots.length === 0 ? <p className="text-sm text-slate-500">No shared open times for this date and duration.</p> : (
+                  <div className="grid max-h-56 grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-3 lg:grid-cols-4">
+                    {availableSlots.map((slot) => {
+                      const start = utcToLocalTime(slot.start_utc, tz);
+                      const end = utcToLocalTime(slot.end_utc, tz);
+                      return (
+                        <button
+                          key={slot.start_utc}
+                          type="button"
+                          aria-pressed={startTime === start && endTime === end}
+                          onClick={() => { setStartTime(start); setEndTime(end); }}
+                          className={`rounded border px-2 py-2 text-sm ${startTime === start && endTime === end ? "border-indigo-600 bg-indigo-50 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-200" : "border-slate-300 hover:border-indigo-500 dark:border-slate-700"}`}
+                        >
+                          {start}–{end}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )
+              ) : <p className="text-sm text-slate-500">Choose a date and a duration from 15 minutes to 8 hours.</p>}
             </div>
             <SearchSelect<string>
               label="Timezone"
@@ -407,6 +468,10 @@ export function ScheduleInterviewPage() {
                   <dd>{roundType} — {interviewRound}</dd>
                 </div>
                 <div>
+                  <dt className="text-slate-500">Status</dt>
+                  <dd>{initialStatus}</dd>
+                </div>
+                <div>
                   <dt className="text-slate-500">Panel</dt>
                   <dd>{panelMembers.map((p) => p.email).join(", ")}</dd>
                 </div>
@@ -435,7 +500,7 @@ export function ScheduleInterviewPage() {
               <h3 className="mb-2 font-semibold">Panel Availability</h3>
               {checkingConflicts && <p className="text-sm text-slate-500">Checking panel availability…</p>}
               {!checkingConflicts && conflicts === null && (
-                <p className="text-sm text-slate-500">Availability could not be verified. You may still proceed.</p>
+                <p role="alert" className="text-sm text-red-700">Availability could not be verified. Go back and try again.</p>
               )}
               {!checkingConflicts && conflicts !== null && conflicts.length === 0 && unavailablePanelSubs.length === 0 && (
                 <p className="text-sm text-emerald-700 dark:text-emerald-300">No conflicts detected for the selected panel members.</p>
@@ -454,7 +519,7 @@ export function ScheduleInterviewPage() {
                 <ul className="space-y-1 text-sm text-red-700">
                   {conflicts.map((conflict) => (
                     <li key={conflict.interview_id}>
-                      Conflict for {conflict.panel_subs.join(", ")} with an existing interview at{" "}
+                      {conflict.candidate_overlap ? "Candidate" : panelMembers.filter((member) => conflict.panel_subs.includes(member.sub)).map((member) => member.full_name || member.email).join(", ")} is already booked near{" "}
                       {new Date(conflict.start_utc).toLocaleString()}
                     </li>
                   ))}
@@ -490,8 +555,9 @@ export function ScheduleInterviewPage() {
               disabled={
                 submitting
                 || checkingConflicts
+                || conflicts === null
                 || unavailablePanelSubs.length > 0
-                || (conflicts !== null && conflicts.length > 0)
+                || conflicts.length > 0
               }
             >
               {submitting ? "Scheduling…" : "Schedule Interview"}

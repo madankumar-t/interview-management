@@ -36,10 +36,36 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!response.ok) {
     throw new Error(`${response.status}: ${await response.text()}`);
   }
+  if (response.status === 204) {
+    return undefined as T;
+  }
   return (await response.json()) as T;
 }
 
+async function photoRequest(method: "GET" | "PUT" | "DELETE", file?: File): Promise<Response> {
+  const session = await getValidSession();
+  const headers = new Headers();
+  if (session?.accessToken) headers.set("Authorization", `Bearer ${session.accessToken}`);
+  if (file) headers.set("Content-Type", file.type);
+  const response = await fetch(`${config.apiBaseUrl}/profile/me/photo`, { method, headers, body: file });
+  if (response.status === 401 && session) {
+    markSessionExpired();
+    throw new Error("Your session has expired. Please log in again.");
+  }
+  if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
+  return response;
+}
+
 export const api = {
+  getMyReminders: () => request<{ reminders: { id: string; interview_id: string; created_at: string }[] }>("/reminders/me"),
+  dismissMyReminder: (id: string) => request<void>(`/reminders/me/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  getMyProfile: () => request<{ display_name: string; email: string; has_photo: boolean }>("/profile/me"),
+  updateMyProfile: (display_name: string) => request<{ display_name: string; email: string; has_photo: boolean }>("/profile/me", {
+    method: "PUT", body: JSON.stringify({ display_name }),
+  }),
+  getMyProfilePhoto: async () => (await photoRequest("GET")).blob(),
+  uploadMyProfilePhoto: async (file: File) => { await photoRequest("PUT", file); },
+  deleteMyProfilePhoto: async () => { await photoRequest("DELETE"); },
   createCandidate: (body: unknown) => request("/candidates", { method: "POST", body: JSON.stringify(body) }),
   updateCandidateStatus: (candidateId: string, status: "Active" | "Closed") =>
     request<{ candidate_id: string; status: string }>(`/candidates/${encodeURIComponent(candidateId)}/status`, {
@@ -88,13 +114,21 @@ export const api = {
     });
     return request<{ panel_members: PanelMember[] }>(`/panels/members?${search.toString()}`);
   },
-  checkConflicts: (panelSubs: string[], startUtc: string, endUtc: string) => {
+  checkConflicts: (panelSubs: string[], startUtc: string, endUtc: string, candidateId?: string) => {
     const search = new URLSearchParams({
       panel_subs: panelSubs.join(","),
       start_utc: startUtc,
       end_utc: endUtc,
+      candidate_id: candidateId ?? "",
     });
     return request<ConflictCheck>(`/panels/conflicts?${search.toString()}`);
+  },
+  getAvailableSlots: (panelSubs: string[], date: string, timezone: string, durationMinutes: number, candidateId?: string) => {
+    const search = new URLSearchParams({
+      panel_subs: panelSubs.join(","), date, timezone, duration_minutes: String(durationMinutes),
+      candidate_id: candidateId ?? "",
+    });
+    return request<{ slots: { start_utc: string; end_utc: string }[] }>(`/panels/available-slots?${search.toString()}`);
   },
   getMyAvailability: () => request<{ sub: string; availability: AvailabilitySlot[] }>("/availability/me"),
   updateMyAvailability: (slots: AvailabilitySlot[]) =>

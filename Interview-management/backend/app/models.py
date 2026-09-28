@@ -233,6 +233,7 @@ class ScheduleInterviewRequest(BaseModel):
     requisition_id: str
     round_name: str
     interview_type: str
+    status: InterviewStatus = InterviewStatus.SCHEDULED
     required_skills: list[str] = Field(default_factory=list)
     panel_subs: list[str]
     lead_panel_sub: str
@@ -248,6 +249,8 @@ class ScheduleInterviewRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_panels(self) -> "ScheduleInterviewRequest":
+        if self.status.value not in INTERVIEW_SCHEDULED_STATUSES:
+            raise ValueError("Initial interview status must be a scheduled status")
         if len(self.panel_subs) == 0:
             raise ValueError("At least one panel member is required")
         if self.lead_panel_sub not in self.panel_subs:

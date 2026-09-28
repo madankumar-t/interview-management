@@ -25,15 +25,6 @@ from app.state import local_state
 router = APIRouter(prefix="/interviews", tags=["interviews"])
 
 
-def _initial_status(payload: ScheduleInterviewRequest) -> str:
-    round_label = f"{payload.round_name} {payload.interview_type}".casefold()
-    if "client" in round_label:
-        return InterviewStatus.CLIENT_ROUND_SCHEDULED.value
-    if "round 2" in round_label or "l2" in round_label:
-        return InterviewStatus.L2_SCHEDULED.value
-    return InterviewStatus.L1_SCHEDULED.value
-
-
 @router.get("")
 def list_interviews(
     user=CurrentUser,
@@ -102,7 +93,7 @@ def schedule_interview(payload: ScheduleInterviewRequest, user=CurrentUser):
                 **payload.model_dump(),
                 "department": req["department"],
                 "project": req["project"],
-                "status": _initial_status(payload),
+                "status": payload.status.value,
             }
         )
         local_state.audit.append(
@@ -141,7 +132,7 @@ def schedule_interview(payload: ScheduleInterviewRequest, user=CurrentUser):
         actor_email=user.email or "",
         actor_roles=sorted(role.value for role in user.groups),
         idempotency_key=payload.idempotency_key,
-        status=_initial_status(payload),
+        status=payload.status.value,
     )
     try:
         return repo.schedule_interview(schedule_payload)

@@ -289,7 +289,7 @@ resource "aws_iam_role_policy" "lambda" {
       },
       {
         Effect   = "Allow"
-        Action   = ["s3:GetObject", "s3:PutObject"]
+        Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
         Resource = "${aws_s3_bucket.documents.arn}/*"
       },
       {
@@ -324,12 +324,51 @@ resource "aws_lambda_function" "api" {
       APP_ENV                  = var.environment
       APP_AWS_REGION           = var.aws_region
       APP_TABLE_NAME           = aws_dynamodb_table.main.name
+      APP_DOCUMENTS_BUCKET     = aws_s3_bucket.documents.bucket
       APP_COGNITO_USER_POOL_ID = aws_cognito_user_pool.main.id
       APP_COGNITO_CLIENT_ID    = aws_cognito_user_pool_client.spa.id
       APP_CORS_ORIGIN          = "https://${aws_cloudfront_distribution.frontend.domain_name}"
       APP_DEMO_MODE            = "false"
     }
   }
+}
+
+resource "aws_lambda_function" "feedback_reminders" {
+  function_name    = "${local.prefix}-feedback-reminders"
+  role             = aws_iam_role.lambda.arn
+  runtime          = "python3.12"
+  handler          = "app.reminders.handler"
+  timeout          = 300
+  s3_bucket        = aws_s3_bucket.documents.bucket
+  s3_key           = "deployments/backend.zip"
+  source_code_hash = filebase64sha256("${path.module}/../../../artifacts/backend.zip")
+  depends_on       = [aws_iam_role_policy.lambda]
+  environment {
+    variables = {
+      APP_ENV        = var.environment
+      APP_AWS_REGION = var.aws_region
+      APP_TABLE_NAME = aws_dynamodb_table.main.name
+      APP_DEMO_MODE  = "false"
+    }
+  }
+}
+
+resource "aws_cloudwatch_event_rule" "feedback_reminders" {
+  name                = "${local.prefix}-feedback-reminders"
+  schedule_expression = "rate(1 hour)"
+}
+
+resource "aws_cloudwatch_event_target" "feedback_reminders" {
+  rule = aws_cloudwatch_event_rule.feedback_reminders.name
+  arn  = aws_lambda_function.feedback_reminders.arn
+}
+
+resource "aws_lambda_permission" "feedback_reminders" {
+  statement_id  = "AllowFeedbackReminderSchedule"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.feedback_reminders.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.feedback_reminders.arn
 }
 
 resource "aws_apigatewayv2_api" "http" {

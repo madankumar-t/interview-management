@@ -146,6 +146,32 @@ def test_ta_can_schedule_only_within_panel_availability(monkeypatch) -> None:
         },
     )
     assert available.status_code == 201
+    assert available.json()["status"] == "Scheduled"
+
+    selected_status = client.post(
+        "/interviews",
+        json={
+            **base_payload,
+            "status": "L2 Scheduled",
+            "start_local_iso": "2026-09-20T11:30:00",
+            "end_local_iso": "2026-09-20T12:00:00",
+            "idempotency_key": "selected-status",
+        },
+    )
+    assert selected_status.status_code == 201
+    assert selected_status.json()["status"] == "L2 Scheduled"
+
+    invalid_status = client.post(
+        "/interviews",
+        json={
+            **base_payload,
+            "status": "Completed",
+            "start_local_iso": "2026-09-20T11:30:00",
+            "end_local_iso": "2026-09-20T12:00:00",
+            "idempotency_key": "invalid-status",
+        },
+    )
+    assert invalid_status.status_code == 422
 
     unavailable = client.post(
         "/interviews",

@@ -199,7 +199,7 @@ function UserRow({ user, onChanged }: { user: AdminUser; onChanged: () => void }
             onClick={resetPassword}
             title={passwordResetHint}
           >
-            Reset Password
+            {user.cognito_status === "FORCE_CHANGE_PASSWORD" ? "Resend Invitation" : "Reset Password"}
           </button>
           {passwordResetHint && <span className="self-center text-xs text-slate-500">{passwordResetHint}</span>}
           <button

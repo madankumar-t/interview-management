@@ -119,6 +119,7 @@ export interface InterviewListItem extends Interview {
 
 export interface Conflict {
   panel_subs: string[];
+  candidate_overlap?: boolean;
   interview_id: string;
   start_utc: string;
   end_utc: string;

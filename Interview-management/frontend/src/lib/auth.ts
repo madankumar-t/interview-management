@@ -17,7 +17,12 @@ export function getSession(): UserSession | null {
   if (!raw) {
     return null;
   }
-  return JSON.parse(raw) as UserSession;
+  const session = JSON.parse(raw) as UserSession;
+  if (!session.email) {
+    const claims = parseJwt(session.accessToken);
+    session.email = String(claims.username ?? claims["cognito:username"] ?? "");
+  }
+  return session;
 }
 
 export function setSession(session: UserSession): void {
@@ -91,14 +96,16 @@ export async function handleAuthCallback(): Promise<UserSession | null> {
   if (!tokenResponse.ok) {
     return null;
   }
-  const tokenJson = (await tokenResponse.json()) as { access_token: string; refresh_token?: string; expires_in?: number };
+  const tokenJson = (await tokenResponse.json()) as { access_token: string; id_token?: string; refresh_token?: string; expires_in?: number };
   const accessToken = tokenJson.access_token;
   const claims = parseJwt(accessToken);
+  const identity = tokenJson.id_token ? parseJwt(tokenJson.id_token) : {};
   const rawGroups = claims["cognito:groups"];
   const groups = (Array.isArray(rawGroups) ? rawGroups : []) as UserSession["groups"];
   const session: UserSession = {
     sub: String(claims.sub ?? ""),
-    email: String(claims.email ?? ""),
+    email: String(identity.email ?? claims.email ?? claims.username ?? claims["cognito:username"] ?? ""),
+    name: typeof identity.name === "string" ? identity.name : undefined,
     groups,
     accessToken,
     refreshToken: tokenJson.refresh_token,

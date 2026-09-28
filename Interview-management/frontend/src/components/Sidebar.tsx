@@ -15,9 +15,12 @@ const pages = [
   { to: "/my-schedule", label: "My Schedule", roles: ["Administrator", "Manager", "TA", "Panel"] as Role[] },
   { to: "/my-availability", label: "My Availability", roles: ["Administrator", "Manager", "Panel"] as Role[] },
   { to: "/pending-feedback", label: "Pending Feedback", roles: ["Administrator", "Manager", "TA", "Panel"] as Role[] },
+  { to: "/feedback", label: "Candidate Feedback", roles: ["Administrator", "Manager", "TA", "Panel"] as Role[] },
+  { to: "/reminders", label: "Reminders", roles: ["Administrator", "Manager", "TA", "Panel"] as Role[] },
   { to: "/reports", label: "Reports", roles: ["Administrator", "Manager"] as Role[] },
   { to: "/users", label: "User Management", roles: ["Administrator", "Manager"] as Role[] },
   { to: "/settings", label: "Settings", roles: ["Administrator"] as Role[] },
+  { to: "/profile", label: "Profile Settings", roles: ["Administrator", "Manager", "TA", "Panel"] as Role[] },
   { to: "/audit", label: "Audit Log", roles: ["Administrator", "Manager"] as Role[] },
 ];
 

@@ -50,6 +50,7 @@ describe("Sidebar", () => {
     expect(screen.getByText("Add Panel Member")).not.toBeNull();
     expect(screen.getByText("My Availability")).not.toBeNull();
     expect(screen.getByText("Pending Feedback")).not.toBeNull();
+    expect(screen.getByText("Candidate Feedback")).not.toBeNull();
     expect(screen.getByText("User Management")).not.toBeNull();
     expect(screen.getByText("Reports")).not.toBeNull();
     expect(screen.getByText("Audit Log")).not.toBeNull();

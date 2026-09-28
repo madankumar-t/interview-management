@@ -1,14 +1,16 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { AppLayout } from "./AppLayout";
 import { resetMyPassword } from "../lib/auth";
+import { api } from "../lib/api";
 import type { Role, UserSession } from "../types/auth";
 
 vi.mock("../lib/auth", () => ({
   logout: vi.fn(),
   resetMyPassword: vi.fn(),
 }));
+vi.mock("../lib/api", () => ({ api: { getMyProfile: vi.fn(), getMyReminders: vi.fn() } }));
 
 function renderLayout(role: Role) {
   const session: UserSession = {
@@ -34,6 +36,11 @@ describe("AppLayout password reset", () => {
     vi.clearAllMocks();
   });
 
+  beforeEach(() => {
+    vi.mocked(api.getMyProfile).mockResolvedValue({ display_name: "", email: "panel@example.com", has_photo: false });
+    vi.mocked(api.getMyReminders).mockResolvedValue({ reminders: [] });
+  });
+
   for (const role of ["Administrator", "Manager", "TA", "Panel"] as const) {
     it(`allows ${role} users to start their own password reset`, () => {
       renderLayout(role);
@@ -41,4 +48,10 @@ describe("AppLayout password reset", () => {
       expect(resetMyPassword).toHaveBeenCalledOnce();
     });
   }
+
+  it("shows the panel login alongside its role", () => {
+    renderLayout("Panel");
+    expect(screen.getByRole("link", { name: "Profile settings" }).getAttribute("href")).toBe("/profile");
+    expect(screen.getByText("panel@example.com")).toBeTruthy();
+  });
 });

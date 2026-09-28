@@ -172,7 +172,87 @@ class DynamoRepository:
             "sub": sub,
             "status": item.get("status", {}).get("S", "ACTIVE"),
             "authz_version": int(item.get("authz_version", {}).get("N", "0")),
+            "display_name": item.get("display_name", {}).get("S", ""),
+            "has_photo": item.get("photo_content_type", {}).get("S", "") != "",
         }
+
+    def get_candidate_ta_owner(self, candidate_id: str) -> str | None:
+        response = self.client.get_item(
+            TableName=self.table_name,
+            Key={"pk": {"S": f"CANDIDATE#{candidate_id}"}, "sk": {"S": "PROFILE"}},
+            ConsistentRead=True,
+            ProjectionExpression="ta_owner_sub",
+        )
+        return response.get("Item", {}).get("ta_owner_sub", {}).get("S") or None
+
+    def create_feedback_reminder(self, interview: dict[str, Any], recipient: str, when: str) -> bool:
+        item = {
+            "pk": {"S": f"USER#{recipient}"},
+            "sk": {"S": f"REMINDER#FEEDBACK#{interview['interview_id']}#{interview['version']}"},
+            "entity_type": {"S": "feedback_reminder"},
+            "interview_id": {"S": interview["interview_id"]},
+            "candidate_id": {"S": interview["candidate_id"]},
+            "created_at": {"S": when},
+        }
+        try:
+            self.client.put_item(TableName=self.table_name, Item=item, ConditionExpression="attribute_not_exists(pk)")
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
+                return False
+            raise
+        return True
+
+    def list_feedback_reminders(self, sub: str) -> list[dict[str, str]]:
+        reminders: list[dict[str, str]] = []
+        cursor = None
+        while True:
+            request: dict[str, Any] = {
+                "TableName": self.table_name,
+                "KeyConditionExpression": "pk = :pk AND begins_with(sk, :prefix)",
+                "ExpressionAttributeValues": {":pk": {"S": f"USER#{sub}"}, ":prefix": {"S": "REMINDER#FEEDBACK#"}},
+                "ConsistentRead": True,
+            }
+            if cursor:
+                request["ExclusiveStartKey"] = cursor
+            response = self.client.query(**request)
+            for item in response.get("Items", []):
+                if item.get("dismissed", {}).get("BOOL", False):
+                    continue
+                reminders.append({
+                    "id": item["sk"]["S"], "interview_id": item["interview_id"]["S"],
+                    "created_at": item["created_at"]["S"],
+                })
+            cursor = response.get("LastEvaluatedKey")
+            if not cursor:
+                break
+        return sorted(reminders, key=lambda item: item["created_at"], reverse=True)
+
+    def dismiss_feedback_reminder(self, sub: str, reminder_id: str) -> None:
+        self.client.update_item(
+            TableName=self.table_name,
+            Key={"pk": {"S": f"USER#{sub}"}, "sk": {"S": reminder_id}},
+            UpdateExpression="SET dismissed = :yes",
+            ConditionExpression="attribute_exists(pk)",
+            ExpressionAttributeValues={":yes": {"BOOL": True}},
+        )
+
+    def update_self_profile(self, sub: str, display_name: str) -> None:
+        self.client.update_item(
+            TableName=self.table_name,
+            Key={"pk": {"S": f"USER#{sub}"}, "sk": {"S": "PROFILE"}},
+            UpdateExpression="SET display_name = :name",
+            ConditionExpression="attribute_exists(pk)",
+            ExpressionAttributeValues={":name": {"S": display_name}},
+        )
+
+    def set_profile_photo_type(self, sub: str, content_type: str) -> None:
+        self.client.update_item(
+            TableName=self.table_name,
+            Key={"pk": {"S": f"USER#{sub}"}, "sk": {"S": "PROFILE"}},
+            UpdateExpression="SET photo_content_type = :content_type",
+            ConditionExpression="attribute_exists(pk)",
+            ExpressionAttributeValues={":content_type": {"S": content_type}},
+        )
 
     def get_availability(self, sub: str) -> list[dict[str, str]]:
         response = self.client.get_item(

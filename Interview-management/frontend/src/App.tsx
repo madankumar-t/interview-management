@@ -14,10 +14,13 @@ import { CalendarPage } from "./pages/CalendarPage";
 import { MySchedulePage } from "./pages/MySchedulePage";
 import { FeedbackPage } from "./pages/FeedbackPage";
 import { PendingFeedbackPage } from "./pages/PendingFeedbackPage";
+import { FeedbackOverviewPage } from "./pages/FeedbackOverviewPage";
 import { MyAvailabilityPage } from "./pages/MyAvailabilityPage";
 import { UsersPage } from "./pages/UsersPage";
 import { AuditPage } from "./pages/AuditPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { ProfilePage } from "./pages/ProfilePage";
+import { RemindersPage } from "./pages/RemindersPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { config } from "./lib/config";
 import { getSession, handleAuthCallback, login, SESSION_EXPIRED_EVENT } from "./lib/auth";
@@ -95,9 +98,12 @@ function App() {
           <Route path="/my-schedule" element={<RoleRoute session={session} roles={["Administrator", "Manager", "TA", "Panel"]}><MySchedulePage groups={session.groups} /></RoleRoute>} />
           <Route path="/my-availability" element={<RoleRoute session={session} roles={["Administrator", "Manager", "Panel"]}><MyAvailabilityPage /></RoleRoute>} />
           <Route path="/pending-feedback" element={<RoleRoute session={session} roles={["Administrator", "Manager", "TA", "Panel"]}><PendingFeedbackPage session={session} /></RoleRoute>} />
+          <Route path="/feedback" element={<RoleRoute session={session} roles={["Administrator", "Manager", "TA", "Panel"]}><FeedbackOverviewPage session={session} /></RoleRoute>} />
+          <Route path="/reminders" element={<RemindersPage session={session} />} />
           <Route path="/reports" element={<RoleRoute session={session} roles={["Administrator", "Manager"]}><ReportsPage /></RoleRoute>} />
           <Route path="/users" element={<RoleRoute session={session} roles={["Administrator", "Manager"]}><UsersPage /></RoleRoute>} />
           {isAdmin && <Route path="/settings" element={<SettingsPage />} />}
+          <Route path="/profile" element={<ProfilePage session={session} />} />
           <Route path="/audit" element={<RoleRoute session={session} roles={["Administrator", "Manager"]}><AuditPage /></RoleRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

@@ -111,7 +111,7 @@ jobs:
             echo "VITE_COGNITO_DOMAIN=$COGNITO_DOMAIN"
             echo "VITE_COGNITO_CLIENT_ID=$COGNITO_CLIENT_ID"
             echo "VITE_COGNITO_API_SCOPES=$COGNITO_API_SCOPES"
-            echo "VITE_COGNITO_REDIRECT_URI=https://$CLOUDFRONT_DOMAIN/"
+            echo "VITE_COGNITO_REDIRECT_URI=https://$CLOUDFRONT_DOMAIN/auth/callback"
             echo "VITE_COGNITO_LOGOUT_URI=https://$CLOUDFRONT_DOMAIN/"
           } >> "$GITHUB_ENV"
       - run: npm run build
@@ -162,7 +162,7 @@ jobs:
             echo "VITE_COGNITO_DOMAIN=$COGNITO_DOMAIN"
             echo "VITE_COGNITO_CLIENT_ID=$COGNITO_CLIENT_ID"
             echo "VITE_COGNITO_API_SCOPES=$COGNITO_API_SCOPES"
-            echo "VITE_COGNITO_REDIRECT_URI=https://$CLOUDFRONT_DOMAIN/"
+            echo "VITE_COGNITO_REDIRECT_URI=https://$CLOUDFRONT_DOMAIN/auth/callback"
             echo "VITE_COGNITO_LOGOUT_URI=https://$CLOUDFRONT_DOMAIN/"
           } >> "$GITHUB_ENV"
       - run: npm run build

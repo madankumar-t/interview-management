@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     env: str = "dev"
     aws_region: str = "ap-south-1"
     table_name: str = "interview-management-dev"
+    documents_bucket: str = "interview-management-dev-documents"
     cognito_user_pool_id: str = ""
     cognito_client_id: str = ""
     cors_origin: str = "http://localhost:5173"

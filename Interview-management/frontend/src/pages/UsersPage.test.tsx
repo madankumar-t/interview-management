@@ -44,13 +44,14 @@ describe("UsersPage password reset", () => {
   it("explains when a temporary password invitation was resent", async () => {
     vi.mocked(api.listAdminUsers).mockResolvedValue([{
       sub: "user-1", email: "user@example.com", groups: ["Panel"], status: "ACTIVE", authz_version: 1,
+      cognito_status: "FORCE_CHANGE_PASSWORD",
     }]);
     vi.mocked(api.resetAdminUserPassword).mockResolvedValue({
       sub: "user-1", message: "Invitation resent with a new temporary password",
     });
 
     render(<UsersPage />);
-    fireEvent.click(await screen.findByRole("button", { name: "Reset Password" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Resend Invitation" }));
 
     expect(await screen.findByText("New invitation sent to user@example.com with a temporary password.")).toBeTruthy();
   });
